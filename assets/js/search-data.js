@@ -455,6 +455,36 @@ ninja.data = [{
           description: "another project with an image 🎉",
           section: "Projects",handler: () => {
               window.location.href = "/projects/9_project/";
+            },},{id: "teachings-calculus-ii-recitation",
+          title: 'Calculus II — Recitation',
+          description: "Recitation leader for Calculus II at Fordham.",
+          section: "Teachings",handler: () => {
+              window.location.href = "/teachings/fordham-calc-ii-recitation-spring-2026/";
+            },},{id: "teachings-math-1100-finite-mathematics",
+          title: 'Math 1100: Finite Mathematics',
+          description: "Introduction to mathematical reasoning, sets and counting, probability, statistics, and applications to the social and management sciences.",
+          section: "Teachings",handler: () => {
+              window.location.href = "/teachings/fordham-math-1100-spring-2026/";
+            },},{id: "teachings-math-1108-finite-mathematics-for-business",
+          title: 'Math 1108: Finite Mathematics for Business',
+          description: "Mathematics for business and the social sciences (two sections).",
+          section: "Teachings",handler: () => {
+              window.location.href = "/teachings/fordham-math-1108-fall-2025/";
+            },},{id: "teachings-math-233-calculus-of-functions-of-several-variables",
+          title: 'MATH 233: Calculus of Functions of Several Variables',
+          description: "Graduate Teaching Assistant for multivariable calculus at UNC Chapel Hill.",
+          section: "Teachings",handler: () => {
+              window.location.href = "/teachings/unc-math-233-summer-2021/";
+            },},{id: "teachings-math-381-discrete-mathematics",
+          title: 'MATH 381: Discrete Mathematics',
+          description: "Graduate Teaching Assistant for discrete mathematics at UNC Chapel Hill.",
+          section: "Teachings",handler: () => {
+              window.location.href = "/teachings/unc-math-381-spring-2021/";
+            },},{id: "teachings-math-383-a-first-course-in-differential-equations",
+          title: 'MATH 383: A First Course in Differential Equations',
+          description: "Graduate Teaching Assistant for introductory ODEs at UNC Chapel Hill.",
+          section: "Teachings",handler: () => {
+              window.location.href = "/teachings/unc-math-383-fall-2020/";
             },},{
         id: 'social-cv',
         title: 'CV',
