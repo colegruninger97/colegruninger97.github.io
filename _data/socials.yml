@@ -5,6 +5,6 @@ cv_pdf: /assets/pdf/CV.pdf # path to your CV PDF file
 email: cgruninger@fordham.edu # your email address
 github_username: colegruninger97
 rss_icon: true # comment this line to hide the RSS icon
-# scholar_userid: # add your Google Scholar ID here when you have one
+scholar_userid: PdFSAtwAAAAJ # Google Scholar user ID
 # orcid_id: # add your ORCID ID here when you have one
 # linkedin_username: # add your LinkedIn handle here
