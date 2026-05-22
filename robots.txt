@@ -1,4 +1,4 @@
 User-agent: *
 Disallow:
 
-Sitemap: https://colegruninger.com/sitemap.xml
+Sitemap: https://colegruninger97.github.io/sitemap.xml
