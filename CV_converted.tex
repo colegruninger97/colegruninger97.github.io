@@ -1,0 +1,149 @@
+\documentclass[10pt]{article}
+
+\usepackage[top=0.7in,bottom=0.75in,left=0.85in,right=0.85in]{geometry}
+\usepackage[scaled=0.95]{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{array}
+\usepackage{ragged2e}
+\usepackage{setspace}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.12em}
+\setlength{\tabcolsep}{0pt}
+\setstretch{1.0}
+\pagenumbering{arabic}
+
+\newcommand{\namestyle}[1]{%
+  {\fontsize{20}{22}\selectfont #1\par}
+}
+
+\newcommand{\contactline}[1]{%
+  {#1\par}
+}
+
+\newcommand{\cvsection}[1]{%
+  \vspace{0.8em}%
+  {\large\bfseries #1\par}%
+  \vspace{0.25em}%
+  \hrule
+  \vspace{0.3em}%
+}
+
+\newcommand{\datedentry}[3]{%
+  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}p{0.78\textwidth}r@{}}
+    #1 & #2 \\
+  \end{tabular*}
+  #3\par
+  \vspace{0.45em}
+}
+
+\newcommand{\simpledatedentry}[2]{%
+  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}p{0.82\textwidth}r@{}}
+    #1 & #2 \\
+  \end{tabular*}
+}
+
+\begin{document}
+
+\begin{center}
+\namestyle{Cole Gruninger}
+\contactline{Department of Mathematics, Fordham University}
+\contactline{Email: \href{mailto:cgruninger@fordham.edu}{cgruninger@fordham.edu}}
+\end{center}
+
+\cvsection{Education}
+
+\datedentry{\textbf{Peter M. Curran Visiting Assistant Professor}, Fordham University}{August 2025 -- Present}
+
+\datedentry{\textbf{Ph.D. in Mathematics}, University of North Carolina at Chapel Hill}{August, 2025}{\textit{Advisor: Professor Boyce E. Griffith and Mark Gregory Forest}}
+
+\simpledatedentry{\textbf{B.S. Chemistry} (Honors), \textbf{B.A. Mathematics}, University of North Carolina at Chapel Hill}{June, 2020}
+
+\cvsection{Research Interests}
+
+Numerical methods for solving partial differential equations; immersed boundary methods for fluid-structure interaction; viscoelastic and non-Newtonian fluids; electrochemical modeling.
+
+\cvsection{Publications}
+
+\textit{Published}
+\begin{enumerate}[leftmargin=1.6em,itemsep=0.45em,topsep=0.35em]
+  \item C.~Gruninger, B.E.~Griffith, ``Composite B-spline regularized delta functions for the immersed boundary method: Divergence-free interpolation and gradient-preserving force spreading'' \textit{Journal of Computational Physics}, 2025.
+  \item L.~Li, C.~Gruninger, J.H.~Lee, B.E.~Griffith, ``Local Divergence-Free Immersed Finite Element-Difference Method Using Composite B-Splines.'' \textit{Advances in Computational Science and Engineering}, 2025.
+  \item A.~Barrett, A.L.~Fogelson, M.G.~Forest, C.~Gruninger, S.~Lim, and B.E.~Griffith. ``Flagellum pumping efficiency in shear-thinning viscoelastic fluids.'' \textit{Journal of Fluid Mechanics}, 999:A2, 2024.
+  \item C.~Gruninger, A.~Barrett, F.~Fang, M.G.~Forest, B.E.~Griffith, ``Benchmarking the immersed boundary method for viscoelastic flows,'' \textit{Journal of Computational Physics}, 506, 112888, 2024.
+  \item D.P.~Isaacs, C.T.~Gruninger, T.~Huang, A.M.~Jordan, G.~Nicholas, C.H.~Chen, ``Visible light induced formation of a tungsten hydride complex,'' \textit{Dalton Transactions}, 52 (10), 3210--3218, 2023.
+  \item T.~Huang, T.M.~Rodriguez, C.T.~Gruninger, D.A.~Kurtz, A.M.~Jordan, C.H.~Chen, ``Electrosynthetic route to cyclopentadienyl rhenium hydride complexes enabled by electrochemical investigations of their redox-induced formation,'' \textit{Organometallics}, 39 (10), 1730--1743, 2020.
+  \item K.J.~Lee, K.M.~Lodaya, C.T.~Gruninger, E.S.~Rountree, J.L.~Dempsey, ``Redox mediators accelerate electrochemically-driven solubility cycling of molecular transition metal complexes,'' \textit{Chemical Science}, 11 (36), 9836--9851, 2020.
+  \item K.J.~Lee, C.T.~Gruninger, K.M.~Lodaya, S.~Qadeer, B.E.~Griffith, J.L.~Dempsey, ``Analysis of multi-electron, multi-step homogeneous catalysis by rotating disc electrode voltammetry: theory, application, and obstacles,'' \textit{Analyst}, 145 (4), 1258--1278, 2020.
+\end{enumerate}
+
+\textit{Preprints}
+\begin{enumerate}[leftmargin=1.6em,itemsep=0.45em,topsep=0.35em]
+  \item C.~Gruninger, B.E.~Griffith, ``Composite B-spline current deposition and interpolation operators for thin-wire finite-difference time-domain simulations,'' \textit{arXiv preprint} \href{https://arxiv.org/abs/2605.21450}{arXiv:2605.21450}, 2026.
+\end{enumerate}
+
+\textit{Undergraduate Honors Thesis}
+
+C.~Gruninger, ``The Search For Photon-Induced Metal Hydride Formation and Modeling of Multi-Step Multi-Electron Electrocatalytic Reactions at the Rotating Disc Electrode,'' 2020.
+
+\newpage
+
+\cvsection{Awards and Honors}
+
+National Defense Science and Engineering (NDSEG) Fellowship, Department of Defense, 2022.\par
+James H. Maguire Memorial Award, Chemistry Department, University of North Carolina at Chapel Hill, 2019.\par
+Summer of Undergraduate Research Fellowship, University of North Carolina at Chapel Hill, 2019.
+
+\cvsection{Talks}
+
+``Orthogonality Preserving Regularized Delta Functions for Staggered Grid Discretizations: Theory and Applications to Fluid-Structure and Electromagnetic Problems'' AMCS Colloquium. University of Pennsylvania. April 6, 2026.
+~\\~\\
+``The Math of Market Madness'' Fordham Math Club. Bronx, New York, February 11, 2026. 
+~\\~\\
+``Orthogonality Preserving Regularized Delta Functions for Staggered Grid Discretizations: Theory and Applications to Fluid-Structure and Electromagnetic Problems'' Modeling and Simulation Group Meeting. NYU Courant. November 6, 2025.
+~\\~\\
+``Elucidating Connections Between Geometry and Mechanics.'' Fordham Math Club. Bronx, New York, October 1, 2025. 
+~\\~\\
+``Benchmarking the immersed boundary method for viscoelastic flows.'' SIAM Conference on Computational Science \& Engineering. Fort Worth, Texas, U.S. March 3--7, 2025.
+~\\~\\
+``Advancing the immersed boundary method: viscoelastic applications and volume conservation improvements.'' Colloquium, Department of Mathematics, Fordham University, Bronx, New York, 2025.
+~\\~\\
+``Improving the volume conservation properties of the immersed boundary method using composite B-spline regularized delta functions.'' The 16\textsuperscript{th} World Congress on Computational Mechanics and 4\textsuperscript{th} Pan American Congress on Computational Mechanics. Vancouver, British Columbia, Canada. July 21--26, 2024.
+~\\~\\
+``Benchmarking the immersed boundary method for viscoelastic flows and improving the volume conservation properties of the immersed boundary method using composite B-spline regularized delta functions.'' The Fifth Annual NDSEG Conference. New Orleans, July 14--18, 2024.
+~\\~\\
+``Benchmarking the immersed boundary method for viscoelastic flows.'' The AIMS Conference on Dynamical Systems, Differential Equations and Applications. UNC-Wilmington, May 31 -- June 4, 2023.
+
+\cvsection{Poster Presentations}
+
+``Benchmarking the immersed boundary method for viscoelastic flows and improving the volume conservation properties of the immersed boundary method using composite B-spline regularized delta functions.'' Computational Tools for PDEs with Complicated Geometries and Interfaces. Flatiron Institute, June 10 -- June 14, 2024.
+
+\cvsection{Teaching}
+
+\textbf{Peter M. Curran Visiting Assistant Professor}, Fordham University, 2025 -- Present \par 
+Spring 2026: Math 1100. Finite Mathematics\par
+Spring 2026: Calculus II Recitation Leader\par
+Fall 2025: Math 1108. Finite Mathematics for Business\par
+Fall 2025: Math 1108. Finite Mathematics for Business\par
+
+\textbf{Graduate Teaching Assistant}, University of North Carolina at Chapel Hill, 2020 -- 2021\par
+Fall 2020: MATH 383. A First Course in Differential Equations\par
+Spring 2021: MATH 381. Discrete Mathematics\par
+Summer 2021: MATH 233. Calculus of Functions of Several Variables
+\newpage
+\cvsection{Skills}
+
+Programming: Python, MATLAB, C++, LaTeX, Julia
+
+\cvsection{References}
+
+Available upon request.\par
+Website: \href{https://sites.google.com/view/colegruninger/about}{https://sites.google.com/view/colegruninger/about}
+
+\end{document}
