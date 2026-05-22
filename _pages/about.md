@@ -2,13 +2,16 @@
 layout: about
 title: about
 permalink: /
-subtitle: PhD student / researcher.
+subtitle: Peter M. Curran Visiting Assistant Professor, <a href='https://www.fordham.edu/academics/colleges-and-schools/fordham-college-at-rose-hill/fchr-academic-departments/mathematics/'>Department of Mathematics</a>, Fordham University.
 
 profile:
   align: right
   image: prof_pic.jpg
   image_circular: false # crops the image to make it circular
   more_info: >
+    <p>Department of Mathematics</p>
+    <p>Fordham University</p>
+    <p>Bronx, NY</p>
 
 selected_papers: true # includes a list of papers marked as "selected={true}"
 social: true # includes social icons at the bottom of the page
@@ -24,6 +27,8 @@ latest_posts:
   limit: 3 # leave blank to include all the blog posts
 ---
 
-Write your bio here. Edit `_pages/about.md` to replace this paragraph with a short introduction — what you work on, where, and what you're curious about.
+I am the Peter M. Curran Visiting Assistant Professor in the [Department of Mathematics](https://www.fordham.edu/academics/colleges-and-schools/fordham-college-at-rose-hill/fchr-academic-departments/mathematics/) at Fordham University. I work on numerical methods for partial differential equations, with a focus on the immersed boundary method and its applications to fluid–structure interaction, viscoelastic and non-Newtonian fluids, and electrochemical modeling.
 
-Drop a headshot at `assets/img/prof_pic.jpg` and it will appear on the right. Add publications in `_bibliography/papers.bib`, news items as files in `_news/`, and social handles in `_data/socials.yml`.
+I completed my Ph.D. in Mathematics at the [University of North Carolina at Chapel Hill](https://math.unc.edu/) in 2025, advised by [Boyce E. Griffith](https://griffith.web.unc.edu/) and [M. Gregory Forest](https://amath.unc.edu/forest/). Before that, I earned a B.S. in Chemistry (Honors) and a B.A. in Mathematics, also at UNC.
+
+You can find a list of my publications [here](/publications/) and my CV [here](/assets/pdf/CV.pdf). Feel free to reach out by [email](mailto:cgruninger@fordham.edu).

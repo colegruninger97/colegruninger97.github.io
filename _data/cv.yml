@@ -1,189 +1,145 @@
 cv:
-  name: Albert Einstein
-  label: Scientist
-  email: einstein@example.com
-  location: Princeton, NJ
+  name: Cole Gruninger
+  label: Peter M. Curran Visiting Assistant Professor
+  email: cgruninger@fordham.edu
+  location: Bronx, NY
   image: ""
-  summary: A German-born theoretical physicist, widely ranked among the greatest and most influential scientists of all time
+  summary: Visiting Assistant Professor of Mathematics at Fordham University working on numerical methods for partial differential equations, immersed boundary methods, fluid–structure interaction, and complex fluids.
 
   social_networks:
-    - network: X
-      username: AlbertEinstein
     - network: GitHub
-      username: example
-    - network: LinkedIn
-      username: example
+      username: colegruninger97
 
   address:
-    street: 2712 Broadway St
-    city: San Francisco
-    region: California
-    postalCode: CA 94115
+    street: Department of Mathematics, Fordham University
+    city: Bronx
+    region: New York
+    postalCode: ""
     countryCode: US
 
   sections:
     Education:
-      - institution: University of Zurich
-        location: Zurich, Switzerland
-        url: https://www.uzh.ch/
-        area: Physics
-        studyType: PhD
-        start_date: 1900
-        end_date: 1905
-        score: ""
-        courses: "Theory of Relativity"
+      - institution: University of North Carolina at Chapel Hill
+        location: Chapel Hill, NC
+        url: https://math.unc.edu/
+        area: Mathematics
+        studyType: Ph.D.
+        end_date: 2025-08
         highlights:
-          - Description 1.
-          - Description 2.
+          - "Advisors: Boyce E. Griffith and M. Gregory Forest"
 
-      - institution: Eidgenössische Technische Hochschule
-        location: Zurich, Switzerland
-        area: Physics
-        studyType: Federal teaching diploma
-        start_date: 1896
-        end_date: 1900
+      - institution: University of North Carolina at Chapel Hill
+        location: Chapel Hill, NC
+        url: https://www.unc.edu/
+        area: Chemistry (Honors) and Mathematics
+        studyType: B.S. and B.A.
+        end_date: 2020-06
         highlights:
-          - Description 1.
-          - Description 2.
+          - Double major
 
     Experience:
-      - company: Institute for Advanced Study, Princeton University
-        position: Professor of Theoretical Physics
-        location: Princeton University, NJ
-        start_date: 1933
-        end_date: 1955
-        summary: Teaching at Palmer Physical Laboratory (now 302 Frist Campus Center). While not a professor at Princeton, I associated with the physics professors and continued to give lectures on campus.
-        highlights:
-          - Relativity
-          - Description 2.
-
-      - company: California Institute of Technology
-        position: Visiting Professor
-        location: Pasadena, California, US
-        start_date: 1933
-        end_date: 1933
-        highlights:
-          - Description 1.
-          - Description 2.
-
-      - company: Kaiser Wilhelm Institute for Physics
-        position: Director
-        location: Berlin, Germany
-        start_date: 1917
-        end_date: 1933
-
-      - company: Karl-Ferdinand University
-        position: Professor of Theoretical Physics
-        location: Prague, Czechoslovakia
-        start_date: 1911
-        end_date: 1917
-
-      - company: University of Zurich
-        position: Associate Professor of Theoretical Physics
-        location: Zurich, Switzerland
-        start_date: 1909
-        end_date: 1911
-
-    Volunteer:
-      - company: People's Climate March
-        position: Lead Organizer
-        location: Zurich, Switzerland
-        start_date: 2014-04-01
-        end_date: 2015-07-01
-        summary: Lead organizer for the New York City branch of the People's Climate March, the largest climate march in history.
-        highlights:
-          - "Awarded 'Climate Hero' award by Greenpeace for my efforts organizing the march."
-          - "Men of the year 2014 by Time magazine"
+      - company: Fordham University
+        position: Peter M. Curran Visiting Assistant Professor
+        location: Bronx, NY
+        start_date: 2025-08
+        end_date: Present
+        summary: Visiting Assistant Professor in the Department of Mathematics.
 
     Awards:
-      - title: Nobel Prize in Physics
-        authors:
-          - "Royal Swedish Academy of Sciences"
-        date: 1921-11-01
-        awarder: Royal Swedish Academy of Sciences
-        url: https://www.nobelprize.org/prizes/physics/1921/einstein/biographical/
-        summary: The Nobel Prizes are five separate prizes that, according to Alfred Nobel's will of 1895, are awarded to 'those who, during the preceding year, have conferred the greatest benefit to humankind.'
+      - title: National Defense Science and Engineering (NDSEG) Fellowship
+        date: 2022
+        awarder: U.S. Department of Defense
 
-      - title: Max Planck Medal
-        authors:
-          - "German Physical Society"
-        date: 2029
-        awarder: German Physical Society
-        summary: Awarded for outstanding scientific achievement
+      - title: James H. Maguire Memorial Award
+        date: 2019
+        awarder: Department of Chemistry, University of North Carolina at Chapel Hill
 
-    Publications:
-      - title: Zur Elektrodynamik bewegter Körper
-        authors:
-          - Albert Einstein
-        publisher: Annalen der Physik
-        releaseDate: 1905-06-30
-        url: https://en.wikisource.org/wiki/Translation:On_the_Electrodynamics_of_Moving_Bodies
-        summary: It concerned an interpretation of the Michelson–Morley experiment and the properties of light and time. Special relativity incorporates the principle that the speed of light is the same for all inertial observers regardless of the state of motion of the source.
+      - title: Summer Undergraduate Research Fellowship
+        date: 2019
+        awarder: University of North Carolina at Chapel Hill
 
-      - title: Über einen die Erzeugung und Verwandlung des Lichtes betreffenden heuristischen Gesichtspunkt
-        authors:
-          - Albert Einstein
-        publisher: Annalen der Physik
-        releaseDate: 1905-03-18
-        url: https://de.wikisource.org/wiki/Über_einen_die_Erzeugung_und_Verwandlung_des_Lichtes_betreffenden_heuristischen_Gesichtspunkt
-        summary: In the second paper, he applied the quantum theory to light to explain the photoelectric effect. In particular, he used the idea of light quanta (photons) to explain experimental results, but stressed the importance of the experimental results. The importance of his work on the photoelectric effect earned him the Nobel Prize in Physics in 1921.
+    Research Interests:
+      - name: Numerical methods for partial differential equations
+        keywords: "Finite difference and finite element methods, regularized delta functions, B-spline interpolation"
 
-      - title: Die Grundlage der allgemeinen Relativitätstheorie
-        authors:
-          - Albert Einstein
-        publisher: Annalen der Physik
-        releaseDate: 1916-03-20
-        url: https://de.wikisource.org/wiki/Die_Grundlage_der_allgemeinen_Relativitätstheorie
-        summary: The publication of the theory of general relativity made him internationally famous. He was professor of physics at the universities of Zurich (1909–1911) and Prague (1911–1912), before he returned to ETH Zurich (1912–1914).
+      - name: Immersed boundary methods
+        keywords: "Fluid–structure interaction, volume conservation, divergence-free interpolation"
+
+      - name: Complex fluids
+        keywords: "Viscoelastic and non-Newtonian flows, Oldroyd-B and Rolie-Poly models"
+
+      - name: Electrochemistry
+        keywords: "Electrochemical modeling, rotating disc electrode voltammetry, multi-electron catalysis"
+
+    Talks:
+      - title: "Orthogonality preserving regularized delta functions for staggered grid discretizations: theory and applications to fluid–structure and electromagnetic problems"
+        date: 2026-04-06
+        location: AMCS Colloquium, University of Pennsylvania
+
+      - title: "The math of market madness"
+        date: 2026-02-11
+        location: Fordham Math Club, Bronx, NY
+
+      - title: "Orthogonality preserving regularized delta functions for staggered grid discretizations: theory and applications to fluid–structure and electromagnetic problems"
+        date: 2025-11-06
+        location: Modeling and Simulation Group Meeting, NYU Courant
+
+      - title: "Elucidating connections between geometry and mechanics"
+        date: 2025-10-01
+        location: Fordham Math Club, Bronx, NY
+
+      - title: "Benchmarking the immersed boundary method for viscoelastic flows"
+        date: 2025-03
+        location: SIAM Conference on Computational Science & Engineering, Fort Worth, TX
+
+      - title: "Advancing the immersed boundary method: viscoelastic applications and volume conservation improvements"
+        date: 2025
+        location: Department of Mathematics Colloquium, Fordham University, Bronx, NY
+
+      - title: "Improving the volume conservation properties of the immersed boundary method using composite B-spline regularized delta functions"
+        date: 2024-07
+        location: 16th World Congress on Computational Mechanics and 4th Pan American Congress on Computational Mechanics, Vancouver, Canada
+
+      - title: "Benchmarking the immersed boundary method for viscoelastic flows and improving the volume conservation properties of the immersed boundary method using composite B-spline regularized delta functions"
+        date: 2024-07
+        location: Fifth Annual NDSEG Conference, New Orleans, LA
+
+      - title: "Benchmarking the immersed boundary method for viscoelastic flows"
+        date: 2023-05
+        location: AIMS Conference on Dynamical Systems, Differential Equations and Applications, UNC-Wilmington
+
+    Poster Presentations:
+      - title: "Benchmarking the immersed boundary method for viscoelastic flows and improving the volume conservation properties of the immersed boundary method using composite B-spline regularized delta functions"
+        date: 2024-06
+        location: Computational Tools for PDEs with Complicated Geometries and Interfaces, Flatiron Institute
+
+    Teaching:
+      - company: Fordham University
+        position: Peter M. Curran Visiting Assistant Professor
+        location: Bronx, NY
+        start_date: 2025-08
+        end_date: Present
+        highlights:
+          - "Spring 2026: Math 1100 — Finite Mathematics"
+          - "Spring 2026: Calculus II recitation leader"
+          - "Fall 2025: Math 1108 — Finite Mathematics for Business (two sections)"
+
+      - company: University of North Carolina at Chapel Hill
+        position: Graduate Teaching Assistant
+        location: Chapel Hill, NC
+        start_date: 2020
+        end_date: 2021
+        highlights:
+          - "Fall 2020: MATH 383 — A First Course in Differential Equations"
+          - "Spring 2021: MATH 381 — Discrete Mathematics"
+          - "Summer 2021: MATH 233 — Calculus of Functions of Several Variables"
 
     Skills:
-      - name: Physics
-        level: Master
-        icon: fa-solid fa-hashtag
-        keywords: "Quantum Mechanics, Quantum Computing, Quantum Information, Quantum Cryptography, Quantum Communication, Quantum Teleportation"
-
-    Languages:
-      - name: German
-        summary: "Native speaker"
-
-      - name: English
-        summary: "Fluent"
-
-    Interests:
-      - name: Physics
-        icon: fa-solid fa-tag
-        keywords: "Quantum Mechanics, Quantum Computing, Quantum Information, Quantum Cryptography, Quantum Communication, Quantum Teleportation"
-
-    Certificates:
-      - name: Machine Learning
-        date: 2018-01-01
-        issuer: Stanford University
-        icon: fa-solid fa-location-dot
-
-      - name: Quantum Computing
-        date: 2018-01-01
-        issuer: Stanford University
-        icon: fa-solid fa-tag
-
-      - name: Quantum Information
-        date: 2018-01-01
-        issuer: Stanford University
-        icon: fa-solid fa-envelope
-
-    Projects:
-      - name: Quantum Computing
-        summary: Quantum computing is the use of quantum-mechanical phenomena such as superposition and entanglement to perform computation. Computers that perform quantum computations are known as quantum computers.
-        highlights:
-          - Quantum Teleportation
-          - Quantum Cryptography
-        start_date: 2018-01-01
-        end_date: 2018-01-01
+      - name: Programming
+        level: Proficient
+        icon: fa-solid fa-code
+        keywords: "Python, MATLAB, C++, Julia, LaTeX"
 
     References:
-      - name: Professor John Doe
-        icon: fa-solid fa-laptop
-        reference: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam condimentum, diam quis convallis euismod, arcu mi ullamcorper lorem, a vestibulum nunc magna at sem. Sed in risus ac felis varius blandit.
-
-      - name: Professor Jane Smith
-        icon: fa-solid fa-thumbtack
-        reference: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam condimentum, diam quis convallis euismod, arcu mi ullamcorper lorem, a vestibulum nunc magna at sem. Sed in risus ac felis varius blandit.
+      - name: Available upon request
+        reference: ""
