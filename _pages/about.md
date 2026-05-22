@@ -2,7 +2,7 @@
 layout: about
 title: about
 permalink: /
-subtitle: Peter M. Curran Visiting Assistant Professor, <a href='https://www.fordham.edu/academics/colleges-and-schools/fordham-college-at-rose-hill/fchr-academic-departments/mathematics/'>Department of Mathematics</a>, Fordham University.
+subtitle:
 
 profile:
   align: right
