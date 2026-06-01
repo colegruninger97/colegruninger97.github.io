@@ -58,87 +58,67 @@ cv:
         date: 2019
         awarder: University of North Carolina at Chapel Hill
 
-    Research Interests:
+    Interests:
       - name: Numerical methods for partial differential equations
-        keywords: "Finite difference and finite element methods, regularized delta functions, B-spline interpolation"
+        keywords:
+          - finite difference and finite element methods
+          - regularized delta functions
+          - B-spline interpolation
 
       - name: Immersed boundary methods
-        keywords: "Fluid–structure interaction, volume conservation, divergence-free interpolation"
+        keywords:
+          - fluid–structure interaction
+          - volume conservation
+          - divergence-free interpolation
 
       - name: Complex fluids
-        keywords: "Viscoelastic and non-Newtonian flows, Oldroyd-B and Rolie-Poly models"
+        keywords:
+          - viscoelastic and non-Newtonian flows
+          - Oldroyd-B and Rolie-Poly models
 
       - name: Electrochemistry
-        keywords: "Electrochemical modeling, rotating disc electrode voltammetry, multi-electron catalysis"
+        keywords:
+          - electrochemical modeling
+          - rotating disc electrode voltammetry
+          - multi-electron catalysis
 
     Talks:
-      - title: "Orthogonality preserving regularized delta functions for staggered grid discretizations: theory and applications to fluid–structure and electromagnetic problems"
-        date: 2026-04-06
-        location: AMCS Colloquium, University of Pennsylvania
+      - bullet: "**Orthogonality preserving regularized delta functions for staggered grid discretizations: theory and applications to fluid–structure and electromagnetic problems.** AMCS Colloquium, University of Pennsylvania. April 6, 2026."
 
-      - title: "The math of market madness"
-        date: 2026-02-11
-        location: Fordham Math Club, Bronx, NY
+      - bullet: "**The math of market madness.** Fordham Math Club, Bronx, NY. February 11, 2026."
 
-      - title: "Orthogonality preserving regularized delta functions for staggered grid discretizations: theory and applications to fluid–structure and electromagnetic problems"
-        date: 2025-11-06
-        location: Modeling and Simulation Group Meeting, NYU Courant
+      - bullet: "**Orthogonality preserving regularized delta functions for staggered grid discretizations: theory and applications to fluid–structure and electromagnetic problems.** Modeling and Simulation Group Meeting, NYU Courant. November 6, 2025."
 
-      - title: "Elucidating connections between geometry and mechanics"
-        date: 2025-10-01
-        location: Fordham Math Club, Bronx, NY
+      - bullet: "**Elucidating connections between geometry and mechanics.** Fordham Math Club, Bronx, NY. October 1, 2025."
 
-      - title: "Benchmarking the immersed boundary method for viscoelastic flows"
-        date: 2025-03
-        location: SIAM Conference on Computational Science & Engineering, Fort Worth, TX
+      - bullet: "**Benchmarking the immersed boundary method for viscoelastic flows.** SIAM Conference on Computational Science & Engineering, Fort Worth, TX. March 2025."
 
-      - title: "Advancing the immersed boundary method: viscoelastic applications and volume conservation improvements"
-        date: 2025
-        location: Department of Mathematics Colloquium, Fordham University, Bronx, NY
+      - bullet: "**Advancing the immersed boundary method: viscoelastic applications and volume conservation improvements.** Department of Mathematics Colloquium, Fordham University, Bronx, NY. 2025."
 
-      - title: "Improving the volume conservation properties of the immersed boundary method using composite B-spline regularized delta functions"
-        date: 2024-07
-        location: 16th World Congress on Computational Mechanics and 4th Pan American Congress on Computational Mechanics, Vancouver, Canada
+      - bullet: "**Improving the volume conservation properties of the immersed boundary method using composite B-spline regularized delta functions.** 16th World Congress on Computational Mechanics and 4th Pan American Congress on Computational Mechanics, Vancouver, Canada. July 2024."
 
-      - title: "Benchmarking the immersed boundary method for viscoelastic flows and improving the volume conservation properties of the immersed boundary method using composite B-spline regularized delta functions"
-        date: 2024-07
-        location: Fifth Annual NDSEG Conference, New Orleans, LA
+      - bullet: "**Benchmarking the immersed boundary method for viscoelastic flows and improving the volume conservation properties of the immersed boundary method using composite B-spline regularized delta functions.** Fifth Annual NDSEG Conference, New Orleans, LA. July 2024."
 
-      - title: "Benchmarking the immersed boundary method for viscoelastic flows"
-        date: 2023-05
-        location: AIMS Conference on Dynamical Systems, Differential Equations and Applications, UNC-Wilmington
+      - bullet: "**Benchmarking the immersed boundary method for viscoelastic flows.** AIMS Conference on Dynamical Systems, Differential Equations and Applications, UNC-Wilmington. May 2023."
 
     Poster Presentations:
-      - title: "Benchmarking the immersed boundary method for viscoelastic flows and improving the volume conservation properties of the immersed boundary method using composite B-spline regularized delta functions"
-        date: 2024-06
-        location: Computational Tools for PDEs with Complicated Geometries and Interfaces, Flatiron Institute
+      - bullet: "**Benchmarking the immersed boundary method for viscoelastic flows and improving the volume conservation properties of the immersed boundary method using composite B-spline regularized delta functions.** Computational Tools for PDEs with Complicated Geometries and Interfaces, Flatiron Institute. June 2024."
 
     Teaching:
-      - company: Fordham University
-        position: Peter M. Curran Visiting Assistant Professor
-        location: Bronx, NY
-        start_date: 2025-08
-        end_date: Present
-        highlights:
-          - "Spring 2026: Math 1100 — Finite Mathematics"
-          - "Spring 2026: Calculus II recitation leader"
-          - "Fall 2025: Math 1108 — Finite Mathematics for Business (two sections)"
+      - bullet: "**Fordham University, Peter M. Curran Visiting Assistant Professor.** Spring 2026: Math 1100 — Finite Mathematics; Calculus II recitation leader. Fall 2025: Math 1108 — Finite Mathematics for Business (two sections)."
 
-      - company: University of North Carolina at Chapel Hill
-        position: Graduate Teaching Assistant
-        location: Chapel Hill, NC
-        start_date: 2020
-        end_date: 2021
-        highlights:
-          - "Fall 2020: MATH 383 — A First Course in Differential Equations"
-          - "Spring 2021: MATH 381 — Discrete Mathematics"
-          - "Summer 2021: MATH 233 — Calculus of Functions of Several Variables"
+      - bullet: "**University of North Carolina at Chapel Hill, Graduate Teaching Assistant.** Fall 2020: MATH 383 — A First Course in Differential Equations. Spring 2021: MATH 381 — Discrete Mathematics. Summer 2021: MATH 233 — Calculus of Functions of Several Variables."
 
     Skills:
       - name: Programming
         level: Proficient
         icon: fa-solid fa-code
-        keywords: "Python, MATLAB, C++, Julia, LaTeX"
+        keywords:
+          - Python
+          - MATLAB
+          - C++
+          - Julia
+          - LaTeX
 
     References:
       - name: Available upon request
