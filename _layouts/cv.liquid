@@ -166,7 +166,7 @@ layout: default
               {% elsif section_title == 'Languages' %}
                 {% assign entries = section_entries %}
                 {% include cv/languages.liquid %}
-              {% elsif section_title == 'Interests' or section_title == 'Academic Interests' %}
+              {% elsif section_title == 'Interests' or section_title == 'Academic Interests' or section_title == 'Research Interests' %}
                 {% assign entries = section_entries %}
                 {% include cv/interests.liquid %}
               {% elsif section_title == 'Certificates' %}

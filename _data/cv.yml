@@ -58,7 +58,7 @@ cv:
         date: 2019
         awarder: University of North Carolina at Chapel Hill
 
-    Interests:
+    Research Interests:
       - name: Numerical methods for partial differential equations
         keywords:
           - finite difference and finite element methods
