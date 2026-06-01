@@ -62,25 +62,20 @@ cv:
       - name: Numerical methods for partial differential equations
         keywords:
           - finite difference and finite element methods
-          - regularized delta functions
-          - B-spline interpolation
-
-      - name: Immersed boundary methods
-        keywords:
-          - fluid–structure interaction
-          - volume conservation
-          - divergence-free interpolation
+          - fluid-structure interaction
+          - immersed boundary methods
+          - mimetic discretizations
 
       - name: Complex fluids
         keywords:
-          - viscoelastic and non-Newtonian flows
-          - Oldroyd-B and Rolie-Poly models
+          - viscoelastic and non-Newtonian fluid-structure-interaction
 
       - name: Electrochemistry
         keywords:
           - electrochemical modeling
           - rotating disc electrode voltammetry
           - multi-electron catalysis
+          - parameter and reaction mechanism inference
 
     Talks:
       - bullet: "**Orthogonality preserving regularized delta functions for staggered grid discretizations: theory and applications to fluid–structure and electromagnetic problems.** AMCS Colloquium, University of Pennsylvania. April 6, 2026."
