@@ -6,8 +6,7 @@ title: blank # the website title (if blank, full name will be used instead)
 first_name: Cole
 middle_name:
 last_name: Gruninger
-contact_note: >
-  You can even add a little note about which of these is the best way to reach you.
+contact_note:
 description: > # the ">" symbol means to ignore newlines until "footer_text:"
   Cole Gruninger — Peter M. Curran Visiting Assistant Professor of Mathematics at Fordham University. Numerical methods for PDEs, immersed boundary methods, and complex fluids.
 footer_text: >
