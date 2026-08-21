@@ -158,11 +158,42 @@ function markMechanismChanged() {
   if(typeof renderBrowserFitParameters==="function")renderBrowserFitParameters();
 }
 
-function setBuilderTransport(transport) {
-  const pnp=transport==="pnp";
-  $("#builder-transport").value=pnp?"pnp":"standard";
-  $("#builder-pnp-settings").hidden=!pnp;
+const pnpReactionTypes=new Set(["bulk_mass_action","solution_electron","custom_bulk_rate"]);
+
+function pnpCompatibilityIssue() {
+  if(customMechanism.species.some(species=>species.phase==="surface"))return "PNP is unavailable while the setup contains surface species.";
+  if(customMechanism.reactions.some(reaction=>!pnpReactionTypes.has(reaction.type)))return "PNP is unavailable while the setup contains surface-only reactions.";
+  return "";
+}
+
+function setControlGroupState(selector,available) {
+  const container=$(selector);
+  container.hidden=!available;
+  container.querySelectorAll("input, select, textarea, button").forEach(control=>{control.disabled=!available;});
+}
+
+function syncTransportControls() {
+  const transport=$("#builder-transport");
+  const issue=pnpCompatibilityIssue();
+  const pnpOption=transport.querySelector('option[value="pnp"]');
+  pnpOption.disabled=Boolean(issue);
+  const unavailable=$("#builder-pnp-unavailable");
+  unavailable.textContent=issue;
+  unavailable.hidden=!issue;
+  if(issue&&transport.value==="pnp")transport.value="standard";
+  const pnp=transport.value==="pnp";
+  setControlGroupState("#builder-pnp-settings",pnp);
   $("#builder-pnp-note").hidden=!pnp;
+  setControlGroupState("#double-layer-field",!pnp);
+  setControlGroupState("#time-integrator-field",!pnp);
+  $("#electrolyte-screen").hidden=pnp;
+  $$('[data-builder-species-key="phase"] option[value="surface"]').forEach(option=>{option.disabled=pnp;});
+  $$('[data-builder-reaction-type] option').forEach(option=>{option.disabled=pnp&&!pnpReactionTypes.has(option.value);});
+}
+
+function setBuilderTransport(transport) {
+  $("#builder-transport").value=transport==="pnp"?"pnp":"standard";
+  syncTransportControls();
 }
 
 function renderBuilderSpecies() {
@@ -181,6 +212,7 @@ function renderBuilderSpecies() {
     renderBuilderSpecies();
   }));
   $$('[data-builder-remove-species]').forEach(button=>button.addEventListener("click",()=>{customMechanism.species.splice(+button.dataset.builderRemoveSpecies,1);markMechanismChanged();renderBuilderSpecies();}));
+  syncTransportControls();
 }
 
 function parameterRows(reaction,index) {
@@ -207,6 +239,7 @@ function renderBuilderReactions() {
   $$('[data-builder-param]').forEach(input=>input.addEventListener("change",()=>{const p=customMechanism.reactions[+input.dataset.builderParam].parameters[input.dataset.builderParamName];p[input.dataset.builderParamKey]=+input.value;markMechanismChanged();}));
   $$('[data-builder-reaction-key="parameterText"]').forEach(input=>input.addEventListener("change",()=>{const reaction=customMechanism.reactions[+input.dataset.builderReaction];syncCustomParameters(reaction);markMechanismChanged();renderBuilderReactions();}));
   $$('[data-builder-remove-reaction]').forEach(button=>button.addEventListener("click",()=>{customMechanism.reactions.splice(+button.dataset.builderRemoveReaction,1);markMechanismChanged();renderBuilderReactions();}));
+  syncTransportControls();
 }
 
 function renderCustomMechanism() {
@@ -260,6 +293,6 @@ $("#builder-add-reaction").addEventListener("click",()=>{customMechanism.reactio
 $("#builder-validate").addEventListener("click",()=>validateBuilder().catch(()=>{}));
 $("#builder-export-button").addEventListener("click",exportBuilder);
 $("#builder-import-button").addEventListener("click",()=>$("#builder-import-file").click());
-$("#builder-import-file").addEventListener("change",async event=>{try{hydrateCustomModel(JSON.parse(await event.target.files[0].text()));markMechanismChanged();await validateBuilder();}catch(error){setBuilderError(error.message);}finally{event.target.value="";}});
+$("#builder-import-file").addEventListener("change",async event=>{try{setBuilderTransport("standard");hydrateCustomModel(JSON.parse(await event.target.files[0].text()));markMechanismChanged();await validateBuilder();}catch(error){setBuilderError(error.message);}finally{event.target.value="";}});
 $("#builder-transport").addEventListener("change",event=>{setBuilderTransport(event.target.value);markMechanismChanged();});
 selectPreset(currentPreset);
