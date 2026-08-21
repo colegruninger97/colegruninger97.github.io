@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - "assets/**"
+      - "Echem_Simulator/**"
       - "_sass/**"
       - "_scripts/**"
       - "**.bib"
@@ -36,6 +37,7 @@ on:
       - main
     paths:
       - "assets/**"
+      - "Echem_Simulator/**"
       - "_sass/**"
       - "_scripts/**"
       - "**.bib"
@@ -98,6 +100,10 @@ jobs:
         run: |
           npm install -g purgecss
           purgecss -c purgecss.config.js
+      - name: Restore verified EchemLab bundle 🧪
+        run: |
+          mkdir -p _site/Echem_Simulator
+          rsync -a --delete --exclude='.echemlab-static-deployment' Echem_Simulator/ _site/Echem_Simulator/
       - name: Deploy 🚀
         if: github.event_name != 'pull_request'
         uses: JamesIves/github-pages-deploy-action@v4
