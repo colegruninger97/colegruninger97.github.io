@@ -4,7 +4,7 @@ const reactionTypeLabels = {
   custom_bulk_rate: "Custom homogeneous rate law",
   surface_electron: "Surface-confined electron transfer",
   adsorption: "Adsorption / desorption",
-  electroadsorption: "Electron-transfer adsorption (solution → surface)",
+  electroadsorption: "Concerted electron-transfer adsorption (solution → surface)",
   surface_mass_action: "Heterogeneous mass action",
   custom_surface_rate: "Custom heterogeneous rate law"
 };
@@ -131,9 +131,9 @@ function reactionTypeState(reaction) {
     return {types,guidance:unitPair?"All participants are surface-bound. Choose surface electron transfer for a redox pair, or heterogeneous kinetics for a chemical step.":"All participants are surface-bound, so only heterogeneous surface chemistry is available for this stoichiometry."};
   }
   const solutionToSurface=unitPair&&phaseOf(reactants[0].species)==="solution"&&phaseOf(products[0].species)==="surface";
-  if(solutionToSurface)return {types:["electroadsorption","adsorption","surface_mass_action","custom_surface_rate"],guidance:"This is a solution → surface pair. Choose electron-transfer adsorption when reduction and binding occur together; choose adsorption / desorption only when no electron is transferred."};
+  if(solutionToSurface)return {types:["electroadsorption","adsorption","surface_mass_action","custom_surface_rate"],guidance:"This is a solution → surface pair. Choose concerted electron-transfer adsorption only when binding and electron transfer are one elementary step. For a sequential mechanism, add the adsorbed or dissolved intermediate as another species and represent each elementary step in a separate reaction row."};
   const surfaceToSolution=unitPair&&phaseOf(reactants[0].species)==="surface"&&phaseOf(products[0].species)==="solution";
-  if(surfaceToSolution)return {types:["surface_mass_action","custom_surface_rate"],guidance:"For a reversible adsorption or electron-transfer adsorption step, write the equation in the solution → surface direction. The reverse process is included by its desorption or oxidation rate."};
+  if(surfaceToSolution)return {types:["surface_mass_action","custom_surface_rate"],guidance:"For a reversible adsorption or concerted electron-transfer adsorption step, write the equation in the solution → surface direction. The reverse process is included by its desorption or oxidation rate."};
   return {types:["surface_mass_action","custom_surface_rate"],guidance:"This step crosses phases or includes a surface participant, so only heterogeneous kinetics are available."};
 }
 
