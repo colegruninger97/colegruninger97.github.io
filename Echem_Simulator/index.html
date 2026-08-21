@@ -48,15 +48,42 @@
         <button id="reset-button" class="button secondary" type="button">Reset defaults</button>
       </section>
 
-      <div class="workspace-grid">
-        <section class="control-panel" aria-labelledby="conditions-heading">
-          <div class="mechanism-section" aria-labelledby="mechanism-heading">
-            <div class="section-heading compact"><div><h3 id="mechanism-heading">Mechanism</h3></div></div>
-            <label class="template-select-field"><span>Reaction scheme</span><select id="preset-select"><option value="solution_e">E — solution electron transfer</option><option value="solution_ec">EC — following homogeneous reaction</option><option value="solution_ecprime">EC′ — homogeneous catalytic regeneration</option><option value="solution_ce">CE — preceding homogeneous reaction</option><option value="solution_ece">ECE — two electron-transfer steps</option><option value="solution_ececprime">ECEC′ — homogeneous two-stage catalyst</option></select></label>
-            <div id="mechanism-equation" class="equation-panel" aria-live="polite"></div>
-            <p id="template-note" class="template-note"></p>
-            <div class="custom-model-prompt"><div><strong>Custom mechanism</strong><span>Define solution species, elementary steps, and custom rate laws.</span></div><button class="button secondary small" type="button" data-view-target="builder">Mechanism builder</button></div>
+      <section class="full-panel reaction-setup-panel" aria-labelledby="mechanism-heading">
+        <div class="section-heading setup-heading"><div><h3 id="mechanism-heading">Reaction setup</h3><p>Start from a familiar mechanism, then edit its species, reactions, and parameter values. The setup shown here is always the model used for simulation.</p></div><div class="inline-actions builder-top-actions"><button id="builder-import-button" class="button secondary small" type="button">Import JSON</button><button id="builder-export-button" class="button secondary small" type="button">Export JSON</button><input id="builder-import-file" type="file" accept="application/json,.json" hidden></div></div>
+        <label class="template-select-field"><span>Start from a mechanism template</span><select id="preset-select"><option value="solution_e">E — solution electron transfer</option><option value="solution_ec">EC — following homogeneous reaction</option><option value="solution_ecprime">EC′ — homogeneous catalytic regeneration</option><option value="solution_ce">CE — preceding homogeneous reaction</option><option value="solution_ece">ECE — two electron-transfer steps</option><option value="solution_ececprime">ECEC′ — homogeneous two-stage catalyst</option><option value="pnp_e">Charged E — explicit PNP transport</option><option value="custom" disabled>Custom setup (edited or imported)</option></select></label>
+        <div id="mechanism-equation" class="equation-panel" aria-live="polite"></div>
+        <p id="template-note" class="template-note"></p>
+        <details class="mechanism-editor advanced-settings" open>
+          <summary>Edit species, reactions, and transport</summary>
+          <div class="mechanism-editor-body">
+            <section class="setup-editor-section">
+              <div class="section-heading compact"><div><h3>Species</h3><p>Enter the simulation concentration or surface coverage and diffusion coefficient for each species.</p></div></div>
+              <div class="builder-species-head" aria-hidden="true"><span>Name</span><span>Phase</span><span>Charge z</span><span>Initial concentration / coverage</span><span>Diffusion coefficient</span><span></span></div>
+              <div id="builder-species" class="builder-species"></div>
+              <button id="builder-add-species" class="button secondary small action-button" type="button">Add species</button>
+            </section>
+            <section class="setup-editor-section">
+              <div class="section-heading compact"><div><h3>Reactions</h3><p>Use separate forward and reverse rows for reversible homogeneous chemistry.</p></div></div>
+              <div id="builder-reactions" class="builder-reactions"></div>
+              <button id="builder-add-reaction" class="button secondary small action-button" type="button">Add reaction</button>
+              <details class="rate-language-help advanced-settings">
+                <summary>Custom rate-law formula reference</summary>
+                <div><p>Formulas can use species names, declared parameters, arithmetic, powers, and <code>exp</code>, <code>log</code>, <code>log10</code>, <code>sqrt</code>, <code>abs</code>, <code>min</code>, <code>max</code>, <code>sin</code>, <code>cos</code>, <code>tanh</code>, and <code>ifelse</code>.</p><p>Homogeneous rates return M s⁻¹. Heterogeneous rates return mol cm⁻² s⁻¹. Formula inputs use M for solution species and mol cm⁻² for surface coverages.</p></div>
+              </details>
+            </section>
+            <section class="setup-editor-section transport-editor">
+              <div class="section-heading compact"><div><h3>Transport</h3><p>Use supported-electrolyte diffusion for routine work or solve migration and diffuse charge explicitly with PNP.</p></div></div>
+              <div class="field-grid"><label class="field"><span>Transport model</span><select id="builder-transport"><option value="standard">Supported electrolyte (selected integrator)</option><option value="pnp">Poisson–Nernst–Planck (fully implicit)</option></select></label></div>
+              <div id="builder-pnp-settings" class="field-grid three spaced" hidden><label class="field"><span>Stern capacitance <b>μF cm⁻²</b></span><input id="builder-pnp-stern" type="number" min="1e-12" step="1" value="20"></label><label class="field"><span>Potential of zero charge <b>V</b></span><input id="builder-pnp-pzc" type="number" step="0.01" value="0"></label><label class="field"><span>Relative permittivity</span><input id="builder-pnp-permittivity" type="number" min="1e-12" step="0.1" value="78.4"></label></div>
+              <p id="builder-pnp-note" class="helper-text" hidden>Enter an integer charge for every mobile species and include all counterions. The bulk inventory must satisfy Σzᵢcᵢ = 0. PNP supplies Stern and diffuse-layer charging, so the empirical Cdl field is ignored.</p>
+            </section>
+            <div class="setup-review"><button id="builder-validate" class="button secondary" type="button">Validate reaction setup</button><div id="builder-error" class="error-message" role="alert" hidden></div><div id="builder-summary" class="empty-state builder-summary">Validate the reaction setup to review its equations and browser compatibility.</div></div>
           </div>
+        </details>
+      </section>
+
+      <div class="workspace-grid simulation-grid">
+        <section class="control-panel" aria-labelledby="conditions-heading">
           <div class="section-heading compact">
             <div><h3 id="conditions-heading">Experimental conditions</h3></div>
           </div>
@@ -78,11 +105,6 @@
               <label class="field"><span>Time integrator</span><select data-key="solver"><option value="bdf1">Implicit BDF1</option><option value="bdf2">Implicit BDF2</option><option value="be_fe">BE/FE (semi-implicit)</option><option value="trap_ab2">TRAP/AB2 (semi-implicit)</option></select></label>
             </div>
           </details>
-
-          <div class="section-heading compact kinetics-heading">
-            <div><h3>Kinetic and transport parameters</h3></div>
-          </div>
-          <div id="kinetic-fields" class="field-grid"></div>
 
           <div id="form-error" class="error-message" role="alert" hidden></div>
           <button id="run-button" class="button primary run-button" type="button">
@@ -140,46 +162,6 @@
       </div>
       </div>
 
-      <div id="view-builder" class="workbench-view">
-        <section class="intro-row">
-          <div><p class="eyebrow">Custom mechanism</p><h2>Define a reaction mechanism</h2><p>Specify solution or surface species, elementary reactions, adsorption, and rate laws.</p></div>
-          <div class="inline-actions builder-top-actions"><button id="builder-import-button" class="button secondary" type="button">Import JSON</button><button id="builder-export-button" class="button secondary" type="button">Export JSON</button><input id="builder-import-file" type="file" accept="application/json,.json" hidden></div>
-        </section>
-        <section class="full-panel">
-          <div class="section-heading"><span class="step-chip">A</span><div><h3>Species inventory</h3><p>Names become symbols in custom formulas, so use letters, numbers, and underscores. Normally fix diffusion coefficients from independent measurements; estimate D only when several scan rates and well-known concentrations and electrode area provide enough information.</p></div></div>
-          <div class="builder-species-head" aria-hidden="true"><span>Name</span><span>Phase</span><span>Charge z</span><span>Initial concentration</span><span>Diffusion coefficient</span><span>Fit D (advanced)</span><span></span></div>
-          <div id="builder-species" class="builder-species"></div>
-          <button id="builder-add-species" class="button secondary small action-button" type="button">Add species</button>
-        </section>
-        <section class="full-panel spaced">
-          <div class="section-heading"><span class="step-chip">B</span><div><h3>Elementary reactions</h3><p>Use separate forward and reverse rows for reversible homogeneous chemistry.</p></div></div>
-          <div id="builder-reactions" class="builder-reactions"></div>
-          <button id="builder-add-reaction" class="button secondary small action-button" type="button">Add reaction</button>
-          <details class="rate-language-help advanced-settings">
-            <summary>Custom rate-law formula reference</summary>
-            <div><p>Formulas can use species names, declared parameters, arithmetic, powers, and <code>exp</code>, <code>log</code>, <code>log10</code>, <code>sqrt</code>, <code>abs</code>, <code>min</code>, <code>max</code>, <code>sin</code>, <code>cos</code>, <code>tanh</code>, and <code>ifelse</code>.</p><p>Homogeneous rates return M s⁻¹. Heterogeneous rates return mol cm⁻² s⁻¹. Formula inputs use M for solution species and mol cm⁻² for surface coverages.</p></div>
-          </details>
-        </section>
-        <section class="full-panel spaced">
-          <div class="section-heading"><span class="step-chip">C</span><div><h3>Transport physics</h3><p>Use supported-electrolyte diffusion for routine work or solve migration and diffuse charge explicitly with PNP.</p></div></div>
-          <div class="field-grid">
-            <label class="field"><span>Transport model</span><select id="builder-transport"><option value="standard">Supported electrolyte (selected integrator)</option><option value="pnp">Poisson–Nernst–Planck (fully implicit)</option></select></label>
-          </div>
-          <div id="builder-pnp-settings" class="field-grid three spaced" hidden>
-            <label class="field"><span>Stern capacitance <b>μF cm⁻²</b></span><input id="builder-pnp-stern" type="number" min="1e-12" step="1" value="20"></label>
-            <label class="field"><span>Potential of zero charge <b>V</b></span><input id="builder-pnp-pzc" type="number" step="0.01" value="0"></label>
-            <label class="field"><span>Relative permittivity</span><input id="builder-pnp-permittivity" type="number" min="1e-12" step="0.1" value="78.4"></label>
-          </div>
-          <p id="builder-pnp-note" class="helper-text" hidden>Enter an integer charge for every mobile species and include all counterions. The bulk inventory must satisfy Σzᵢcᵢ = 0. PNP supplies Stern and diffuse-layer charging, so the empirical Cdl field is ignored.</p>
-        </section>
-        <section class="full-panel spaced builder-review">
-          <div class="section-heading"><span class="step-chip">D</span><div><h3>Validate and use</h3><p>The Rust/WebAssembly engine checks species, stoichiometry, parameters, and rate formulas before solving.</p></div></div>
-          <div class="inline-actions"><button id="builder-validate" class="button secondary" type="button">Validate mechanism</button><button id="builder-simulate" class="button primary" type="button">Simulate mechanism</button><button id="builder-example" class="button quiet" type="button">Restore EC example</button><button id="builder-pnp-example" class="button quiet" type="button">Load PNP redox example</button></div>
-          <div id="builder-error" class="error-message" role="alert" hidden></div>
-          <div id="builder-summary" class="empty-state builder-summary">Validate the mechanism to review its equations and browser compatibility.</div>
-        </section>
-      </div>
-
       <div id="view-data" class="workbench-view">
         <section class="intro-row"><div><p class="eyebrow">Parameter estimation · Step 1</p><h2>Add the experiments you want to fit</h2><p>Load one or more scan rates collected for the same fixed species inventory, confirm their normalization, then continue to parameter selection.</p></div></section>
         <section class="full-panel">
@@ -191,7 +173,7 @@
         <section class="full-panel spaced">
           <div class="section-heading"><span class="step-chip">B</span><div><h3>Study datasets <span id="dataset-count" class="dataset-count">0 loaded</span></h3><p>Confirm each scan rate, column mapping, unit conversion, current sign, and reference-potential shift before fitting.</p></div></div>
           <div id="dataset-list" class="dataset-list"><div class="empty-state">No experimental files loaded yet.</div></div>
-          <div class="fit-next-row"><p>Your data are processed in memory and fitted together as one study. The application does not retain uploaded files.</p><button class="button primary" type="button" data-view-target="fit">Continue to parameter selection</button></div>
+          <div class="fit-next-row"><p>Your data are processed in memory and fitted together as one study. The application does not retain uploaded files.</p><button id="fit-next-button" class="button primary" type="button" data-view-target="fit" disabled>Continue to parameter selection</button></div>
         </section>
       </div>
 
@@ -199,9 +181,8 @@
         <section class="intro-row"><div><p class="eyebrow">Parameter estimation · Step 2</p><h2>Select the parameters to estimate</h2><p>Estimate the unknown quantities and hold independently measured quantities at their reported values.</p></div><button class="button secondary" type="button" data-view-target="data">Back to datasets</button></section>
         <div class="analysis-grid">
           <section class="full-panel">
-            <div class="section-heading"><span class="step-chip">A</span><div><h3>Forward model and parameter vector</h3><p>Select parameters supported by the number and range of experimental datasets.</p></div></div>
-            <label class="field"><span>Mechanism</span><select id="fit-preset"><option value="solution_e">Solution E</option><option value="custom">Mechanism builder model</option></select></label>
-            <div class="fit-explainer"><strong>Free and fixed quantities</strong><span><b>Checked:</b> estimated from the voltammograms. <b>Unchecked:</b> held at the displayed value. For custom models, make selections in the mechanism builder.</span></div>
+            <div class="section-heading"><span class="step-chip">A</span><div><h3>Active reaction setup and parameter vector</h3><p>The editable reaction setup from the simulation page is the forward model. Choose parameters supported by the number and range of experimental datasets.</p></div></div>
+            <div class="fit-explainer"><strong>Free and fixed quantities</strong><span><b>Checked:</b> estimated from the loaded voltammograms. <b>Unchecked:</b> held at the displayed value. Starting values and bounds are configured here, after data have been supplied.</span></div>
             <div id="fit-parameter-list" class="parameter-choice-grid"></div>
             <div class="section-heading compact subheading"><span class="step-chip">B</span><div><h3>Optimization</h3><p>Deterministic multistart reduces dependence on a single starting guess. Review every warning before interpreting a fit.</p></div></div>
             <div class="field-grid">
@@ -262,7 +243,7 @@
             <div id="candidate-preview" class="candidate-preview"></div>
           </div>
           <div id="discovery-sparse" class="discovery-mode">
-            <p class="helper-text">Start with the known species and electron-transfer steps in the mechanism builder. Choose one unresolved homogeneous reaction below. Each candidate polynomial rate is placed inside the transport model, fitted to the loaded voltammograms, and compared by its predicted current. Concentrations remain unobserved model states.</p>
+            <p class="helper-text">Start with the known species and electron-transfer steps in the active reaction setup. Choose one unresolved homogeneous reaction below. Each candidate polynomial rate is placed inside the transport model, fitted to the loaded voltammograms, and compared by its predicted current. Concentrations remain unobserved model states.</p>
             <div class="field-grid three">
               <label class="field"><span>Unresolved reaction</span><select id="voltammetric-rate-reaction"></select></label>
               <label class="field"><span>Maximum polynomial degree</span><input id="voltammetric-rate-degree" type="number" min="1" max="3" value="2"></label>
@@ -338,8 +319,8 @@
         <section class="intro-row"><div><p class="eyebrow">Reference</p><h2>Browser simulation guide</h2><p>How to define, run, compare, and export solution-mechanism simulations.</p></div></section>
         <div class="guide-layout">
           <section class="guide-steps">
-            <article><span>1</span><div><h3>Define and simulate the reaction</h3><p>Choose a reaction scheme or define a custom mechanism. Save a result when it should remain as a dashed comparison on subsequent simulations.</p><button class="text-link" type="button" data-view-target="simulate">Go to simulation →</button></div></article>
-            <article><span>2</span><div><h3>Build a custom mechanism</h3><p>Add up to 12 solution or surface species and 64 mass-action, adsorption, algebraic-rate, or electron-transfer steps. Import and export the mechanism as JSON when you want to preserve or share it.</p><button class="text-link" type="button" data-view-target="builder">Open the mechanism builder →</button></div></article>
+            <article><span>1</span><div><h3>Choose and edit the reaction setup</h3><p>Load a familiar template, then edit its species, elementary steps, parameter values, or rate laws directly on the simulation page.</p><button class="text-link" type="button" data-view-target="simulate">Open the reaction setup →</button></div></article>
+            <article><span>2</span><div><h3>Validate and simulate</h3><p>Validate the current equations, then simulate that exact editable setup. Import and export mechanism JSON when you want to preserve or share it.</p><button class="text-link" type="button" data-view-target="simulate">Go to simulation →</button></div></article>
             <article><span>3</span><div><h3>Compare controlled variants</h3><p>Save a simulated trace, change one or more parameters, and run the model again. The saved trace remains available as a user-controlled dashed comparison; set a reaction rate to zero when you want a nonreactive reference.</p><button class="text-link" type="button" data-view-target="simulate">Compare simulations →</button></div></article>
             <article><span>4</span><div><h3>Export calculated data</h3><p>Download the latest time, potential, and current arrays as CSV for plotting or analysis elsewhere. Keep the mechanism JSON with the exported trace so the calculation remains interpretable.</p><button class="text-link" type="button" data-view-target="simulate">Return to simulation →</button></div></article>
           </section>

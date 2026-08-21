@@ -2,74 +2,37 @@ const presets = {
   solution_e: {
     equation: "Ox (solution) + e⁻ ⇌ Red (solution)",
     interpretation: "A diffusion-controlled solution couple. Peak separation and shape respond to electron-transfer rate, diffusion, and scan rate.",
-    fields: [
-      ["bulk_concentration", "Ox bulk concentration", "M", 0.001, 0.0001],
-      ["diffusion_coefficient", "Diffusion coefficient", "cm² s⁻¹", 1e-5, 1e-6],
-      ["formal_potential", "Formal potential E⁰", "V", 0, 0.01],
-      ["electron_transfer_rate", "Electron-transfer rate k⁰", "cm s⁻¹", 0.01, 0.001]
-    ]
+    defaults: {bulk_concentration:0.001,diffusion_coefficient:1e-5,formal_potential:0,electron_transfer_rate:0.01}
   },
   solution_ec: {
     equation: "Ox + e⁻ ⇌ Red  ·  Red → Product",
     interpretation: "Faster following chemistry consumes Red and increasingly distorts the return wave. For an E-only comparison, set the following rate to zero and save the resulting trace.",
-    fields: [
-      ["bulk_concentration", "Ox bulk concentration", "M", 0.001, 0.0001],
-      ["diffusion_coefficient", "Diffusion coefficient", "cm² s⁻¹", 1e-5, 1e-6],
-      ["formal_potential", "Formal potential E⁰", "V", 0, 0.01],
-      ["electron_transfer_rate", "Electron-transfer rate k⁰", "cm s⁻¹", 0.01, 0.001],
-      ["chemical_rate", "Following reaction rate k", "s⁻¹", 5, 1]
-    ]
+    defaults: {bulk_concentration:0.001,diffusion_coefficient:1e-5,formal_potential:0,electron_transfer_rate:0.01,chemical_rate:5}
   },
   solution_ce: {
     equation: "Precursor → Ox  ·  Ox + e⁻ ⇌ Red",
     interpretation: "A homogeneous reaction generates the electroactive species before electron transfer. The preceding rate controls how quickly Ox becomes available at the electrode.",
-    fields: [
-      ["bulk_concentration", "Precursor concentration", "M", 0.001, 0.0001],
-      ["diffusion_coefficient", "Diffusion coefficient", "cm² s⁻¹", 1e-5, 1e-6],
-      ["preceding_rate", "Preceding reaction rate", "s⁻¹", 5, 1],
-      ["formal_potential", "Formal potential E⁰", "V", 0, 0.01],
-      ["electron_transfer_rate", "Electron-transfer rate k⁰", "cm s⁻¹", 0.01, 0.001]
-    ]
+    defaults: {bulk_concentration:0.001,diffusion_coefficient:1e-5,preceding_rate:5,formal_potential:0,electron_transfer_rate:0.01}
   },
   solution_ece: {
     equation: "Ox₁ + e⁻ ⇌ Red₁  ·  Red₁ → Ox₂  ·  Ox₂ + e⁻ ⇌ Red₂",
     interpretation: "Two homogeneous solution redox couples are linked by a following chemical conversion. Both electron-transfer steps occur at the electrode.",
-    fields: [
-      ["bulk_concentration", "Ox₁ concentration", "M", 0.001, 0.0001],
-      ["diffusion_coefficient", "Shared diffusion coefficient", "cm² s⁻¹", 1e-5, 1e-6],
-      ["formal_potential_1", "First formal potential", "V", 0.08, 0.01],
-      ["electron_transfer_rate_1", "First electron-transfer rate", "cm s⁻¹", 0.01, 0.001],
-      ["chemical_rate", "Intermediate conversion rate", "s⁻¹", 5, 1],
-      ["formal_potential_2", "Second formal potential", "V", -0.08, 0.01],
-      ["electron_transfer_rate_2", "Second electron-transfer rate", "cm s⁻¹", 0.01, 0.001]
-    ]
+    defaults: {bulk_concentration:0.001,diffusion_coefficient:1e-5,formal_potential_1:0.08,electron_transfer_rate_1:0.01,chemical_rate:5,formal_potential_2:-0.08,electron_transfer_rate_2:0.01}
   },
   solution_ececprime: {
     equation: "Ox₁ + e⁻ ⇌ Red₁  ·  Red₁ → Ox₂  ·  Ox₂ + e⁻ ⇌ Red₂  ·  Red₂ + S → Ox₂ + P",
     interpretation: "A fully homogeneous ECEC′ sequence. The second reduced species turns over a dissolved substrate and regenerates Ox₂. Set the catalytic rate to zero and save that result as the non-catalytic comparison.",
-    fields: [
-      ["bulk_concentration", "Ox₁ concentration", "M", 0.001, 0.0001],
-      ["substrate_concentration", "Dissolved substrate concentration", "M", 0.002, 0.0001],
-      ["diffusion_coefficient", "Shared diffusion coefficient", "cm² s⁻¹", 1e-5, 1e-6],
-      ["formal_potential_1", "First formal potential", "V", 0.08, 0.01],
-      ["electron_transfer_rate_1", "First electron-transfer rate", "cm s⁻¹", 0.01, 0.001],
-      ["chemical_rate", "Intermediate conversion rate", "s⁻¹", 5, 1],
-      ["formal_potential_2", "Second formal potential", "V", -0.08, 0.01],
-      ["electron_transfer_rate_2", "Second electron-transfer rate", "cm s⁻¹", 0.01, 0.001],
-      ["catalytic_rate", "Homogeneous catalytic rate", "M⁻¹ s⁻¹", 1e4, 1e3]
-    ]
+    defaults: {bulk_concentration:0.001,substrate_concentration:0.002,diffusion_coefficient:1e-5,formal_potential_1:0.08,electron_transfer_rate_1:0.01,chemical_rate:5,formal_potential_2:-0.08,electron_transfer_rate_2:0.01,catalytic_rate:1e4}
   },
   solution_ecprime: {
     equation: "Ox + e⁻ ⇌ Red  ·  Red + S → Ox + P",
     interpretation: "A homogeneous EC′ catalytic cycle. Electron transfer forms Red, which reacts with excess substrate S and regenerates Ox. The catalytic rate and substrate concentration control the current enhancement.",
-    fields: [
-      ["bulk_concentration", "Catalyst concentration", "M", 0.001, 0.0001],
-      ["substrate_concentration", "Substrate concentration", "M", 0.01, 0.001],
-      ["diffusion_coefficient", "Shared diffusion coefficient", "cm² s⁻¹", 1e-5, 1e-6],
-      ["formal_potential", "Formal potential E⁰", "V", 0, 0.01],
-      ["electron_transfer_rate", "Electron-transfer rate k⁰", "cm s⁻¹", 0.01, 0.001],
-      ["catalytic_rate", "Catalytic rate kcat", "M⁻¹ s⁻¹", 1000, 100]
-    ]
+    defaults: {bulk_concentration:0.001,substrate_concentration:0.01,diffusion_coefficient:1e-5,formal_potential:0,electron_transfer_rate:0.01,catalytic_rate:1000}
+  },
+  pnp_e: {
+    equation: "Ox⁺ + e⁻ ⇌ Red  ·  K⁺ / A⁻ supporting electrolyte",
+    interpretation: "A charged redox couple with explicit migration, diffuse charge, and Stern-layer charging through the Poisson–Nernst–Planck transport model.",
+    defaults: {}
   }
 };
 
@@ -112,22 +75,23 @@ function switchView(name) {
   $$(".workbench-view").forEach(view => {
     view.classList.toggle("active", view.id === `view-${name}`);
   });
-  const group = name === "builder" ? "simulate" : name === "fit" ? "data" : name;
+  const group = name === "fit" ? "data" : name;
   $$(".nav-item").forEach(button => {
     button.classList.toggle("active", button.dataset.viewTarget === group);
   });
   window.scrollTo({top: 0, behavior: "smooth"});
 }
 
-function fieldMarkup([key, label, unit, value, step]) {
-  return `<label class="field"><span>${label} <b>${unit}</b></span>
-    <input data-key="${key}" type="number" step="${step}" value="${value}" required></label>`;
-}
-
 function selectPreset(name) {
+  if(!Object.hasOwn(presets,name))return;
   currentPreset = name;
   $("#preset-select").value = name;
-  $("#kinetic-fields").innerHTML = presets[name].fields.map(fieldMarkup).join("");
+  const model=name==="pnp_e"
+    ? defaultPnpMechanism()
+    : window.electrochemBrowserEngine?.presetModel({preset:name,...presets[name].defaults});
+  if(!model){showError("The selected mechanism template is unavailable.");return;}
+  hydrateCustomModel(model);
+  setBuilderTransport(name==="pnp_e"?"pnp":"standard");
   $("#mechanism-equation").textContent = presets[name].equation;
   $("#template-note").textContent = presets[name].interpretation;
   $("#interpretation-text").textContent = presets[name].interpretation;
@@ -136,7 +100,7 @@ function selectPreset(name) {
 }
 
 function payloadFromForm() {
-  const payload = {preset: currentPreset};
+  const payload = {};
   $$('[data-key]').forEach(input => {
     payload[input.dataset.key] = input.tagName === "SELECT" ? input.value : Number(input.value);
   });
@@ -281,7 +245,7 @@ function displayResult(result, simulationInput = null) {
   $("#electrolyte-check-button").disabled = false;
   $("#electrolyte-report").innerHTML = "";
   $("#electrolyte-error").hidden = true;
-  const diffusion=Number(simulationInput?.diffusion_coefficient);
+  const diffusion=Number(simulationInput?.custom_model?.species?.find(species=>species.phase==="solution")?.D??simulationInput?.diffusion_coefficient);
   if(Number.isFinite(diffusion)&&diffusion>0)$("#electrolyte-diffusion").value=String(diffusion);
 }
 
@@ -316,7 +280,7 @@ function renderSavedTraces(){
 function saveCurrentTrace(){
   if(!latestResult||!latestResult.series.length)return;
   const option=$(`#preset-select option[value="${latestResult.preset}"]`);
-  const template=latestResult.preset==="custom"?"Custom mechanism":option?.textContent.split(" — ")[0]||"Simulation";
+  const template=latestResult.preset==="custom"?(customMechanism?.name||"Custom reaction setup"):option?.textContent.split(" — ")[0]||"Simulation";
   const id=++savedTraceSequence;
   savedTraces.push({id,name:`${template} · trace ${id}`,potential:[...latestResult.potential],
     current:[...latestResult.series[0].current],runToken:latestResult._runToken});
@@ -328,12 +292,22 @@ function clearSavedTraces(){savedTraces=[];renderSavedTraces();if(latestResult)d
 async function runSimulation() {
   clearError(); setLoading(true);
   try {
-    const payload = payloadFromForm();
     if (!window.electrochemBrowserEngine) {
       throw new Error("The browser calculation engine did not load. Reload the page and try again.");
     }
-    const result = await window.electrochemBrowserEngine.simulate(payload);
+    const model=serializeCustomModel();
+    await validateBuilder(model);
+    const payload={...payloadFromForm(),preset:"custom",custom_model:model};
+    if($("#builder-transport").value==="pnp"){
+      payload.solver="pnp";
+      payload.pnp_stern_capacitance=Number($("#builder-pnp-stern").value);
+      payload.pnp_pzc=Number($("#builder-pnp-pzc").value);
+      payload.pnp_relative_permittivity=Number($("#builder-pnp-permittivity").value);
+    }
+    if(!window.electrochemBrowserEngine.supportsCustomSimulation(payload))throw new Error("Choose transport physics compatible with the current reaction setup. PNP accepts solution species and homogeneous or solution electron-transfer steps.");
+    const result = await window.electrochemBrowserEngine.simulateCustom(payload);
     displayResult(result, payload);
+    $("#interpretation-text").textContent=payload.solver==="pnp"?"This trace solves migration, diffusion, diffuse charge, the Stern layer, and Frumkin electron transfer together in Rust/WebAssembly.":"This trace was generated from the editable species, reactions, and rate laws shown above.";
   } catch (error) {
     showError(error.message);
   } finally {
@@ -422,5 +396,4 @@ $("#download-button").addEventListener("click", downloadCSV);
 $("#electrolyte-check-button").addEventListener("click",screenSupportingElectrolyte);
 $("#reset-button").addEventListener("click", () => { location.reload(); });
 window.addEventListener("resize", () => latestResult && drawChart(latestResult));
-selectPreset(currentPreset);
 checkEngine();
