@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Browser-based cyclic voltammetry simulation, fitting, mechanism discovery, and uncertainty analysis in Rust and WebAssembly.">
+  <title>EchemLab — Electrochemical Simulation and Inference</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">Cyclic voltammetry</p>
+      <h1>EchemLab</h1>
+    </div>
+    <div class="header-actions">
+      <div id="engine-status" class="engine-status" role="status">
+        <span class="status-dot"></span> Loading browser engine
+      </div>
+    </div>
+  </header>
+
+  <aside class="service-notice" role="note">
+    <strong>Research software.</strong>
+    Results require scientific review. Simulations run on this device in Rust/WebAssembly;
+    mechanism definitions and calculated traces are not sent to a server.
+  </aside>
+
+  <div class="app-shell">
+    <nav class="workflow-nav" aria-label="Analysis workflow">
+      <button class="nav-item active" type="button" data-view-target="simulate">
+        <span><strong>Simulate CV</strong></span>
+      </button>
+      <button class="nav-item" type="button" data-view-target="data"><span><strong>Fit data</strong></span></button>
+      <button class="nav-item" type="button" data-view-target="discover"><span><strong>Discover mechanism</strong></span></button>
+      <button class="nav-item" type="button" data-view-target="uncertainty"><span><strong>Uncertainty</strong></span></button>
+      <button class="nav-item" type="button" data-view-target="guide"><span><strong>Reference</strong></span></button>
+    </nav>
+
+    <main>
+      <div id="view-simulate" class="workbench-view active">
+      <section class="intro-row">
+        <div>
+          <p class="eyebrow">Forward simulation</p>
+          <h2>Simulate a reaction mechanism</h2>
+          <p>Select a mechanism, enter the experimental and kinetic parameters, and simulate the cyclic voltammogram.</p>
+        </div>
+        <button id="reset-button" class="button secondary" type="button">Reset defaults</button>
+      </section>
+
+      <div class="workspace-grid">
+        <section class="control-panel" aria-labelledby="conditions-heading">
+          <div class="mechanism-section" aria-labelledby="mechanism-heading">
+            <div class="section-heading compact"><div><h3 id="mechanism-heading">Mechanism</h3></div></div>
+            <label class="template-select-field"><span>Reaction scheme</span><select id="preset-select"><option value="solution_e">E — solution electron transfer</option><option value="solution_ec">EC — following homogeneous reaction</option><option value="solution_ce">CE — preceding homogeneous reaction</option><option value="solution_ece">ECE — two electron-transfer steps</option><option value="solution_ececprime">ECEC′ — homogeneous two-stage catalyst</option><option value="electrografting">Aryldiazonium electrografting — passivating film growth</option></select></label>
+            <div id="mechanism-equation" class="equation-panel" aria-live="polite"></div>
+            <p id="template-note" class="template-note"></p>
+            <div class="custom-model-prompt"><div><strong>Custom mechanism</strong><span>Define solution species, elementary steps, and custom rate laws.</span></div><button class="button secondary small" type="button" data-view-target="builder">Mechanism builder</button></div>
+          </div>
+          <div class="section-heading compact">
+            <div><h3 id="conditions-heading">Experimental conditions</h3></div>
+          </div>
+          <div class="field-grid">
+            <label class="field"><span>Initial potential (Ei) <b>V</b></span><input data-key="start_potential" type="number" step="0.01" value="0.2"></label>
+            <label class="field"><span>Switching potential (Es) <b>V</b></span><input data-key="switching_potential" type="number" step="0.01" value="-0.2"></label>
+            <label class="field"><span>Scan rate (ν) <b>V s⁻¹</b></span><input data-key="scan_rate" type="number" min="0.0001" step="0.1" value="0.5"></label>
+            <label class="field"><span>Temperature (T) <b>K</b></span><input data-key="temperature" type="number" min="1" step="0.1" value="298.15"></label>
+            <label class="field"><span>Electrode area (A) <b>cm²</b></span><input data-key="electrode_area" type="number" min="0.0001" step="0.1" value="1"></label>
+            <label class="field"><span>Uncompensated resistance (Ru) <b>Ω</b></span><input data-key="solution_resistance" type="number" min="0" step="1" value="0"></label>
+            <label class="field"><span>Double-layer capacitance (Cdl) <b>μF cm⁻²</b></span><input data-key="double_layer_capacitance" type="number" min="0" step="1" value="0"></label>
+          </div>
+
+          <details class="advanced-settings">
+            <summary>Numerical settings</summary>
+            <div class="field-grid inset">
+              <label class="field"><span>Time step (Δt) <b>s</b></span><input data-key="timestep" type="number" min="0.000001" step="0.0001" value="0.001"></label>
+              <label class="field"><span>Spatial grid points</span><input data-key="grid_points" type="number" min="8" max="512" step="1" value="64"></label>
+              <label class="field"><span>Time integrator</span><select data-key="solver"><option value="bdf1">Implicit BDF1</option><option value="bdf2">Implicit BDF2</option><option value="be_fe">BE/FE (semi-implicit)</option><option value="trap_ab2">TRAP/AB2 (semi-implicit)</option></select></label>
+            </div>
+          </details>
+
+          <div class="section-heading compact kinetics-heading">
+            <div><h3>Kinetic and transport parameters</h3></div>
+          </div>
+          <div id="kinetic-fields" class="field-grid"></div>
+
+          <div id="form-error" class="error-message" role="alert" hidden></div>
+          <button id="run-button" class="button primary run-button" type="button">
+            <span class="button-label">Simulate voltammogram</span><span class="button-progress" aria-hidden="true"></span>
+          </button>
+        </section>
+
+        <section class="results-panel" aria-labelledby="result-heading">
+          <div class="result-header">
+            <div><p class="eyebrow">Simulated response</p><h3 id="result-heading">Cyclic voltammogram</h3></div>
+            <div class="result-actions"><button id="save-trace-button" class="button secondary small" type="button" disabled>Save comparison</button><button id="download-button" class="button secondary small" type="button" disabled>Export CSV</button></div>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="cv-chart" role="img" aria-label="Simulated current versus potential"></canvas>
+          </div>
+          <div id="legend" class="legend" aria-label="Plot legend"></div>
+          <div id="saved-trace-bar" class="saved-trace-bar" hidden><label><input id="show-saved-traces" type="checkbox" checked><span>Show saved traces</span></label><div id="saved-trace-list" class="saved-trace-list"></div><button id="clear-saved-traces" class="button quiet small" type="button">Clear saved</button></div>
+          <div class="metric-grid">
+            <article class="metric"><span>Peak current</span><strong id="peak-current">—</strong></article>
+            <article class="metric"><span>Peak potential</span><strong id="peak-potential">—</strong></article>
+            <article class="metric"><span id="enhancement-label">Comparison peak ratio</span><strong id="enhancement">—</strong></article>
+            <article class="metric"><span>Solver time</span><strong id="solver-time">—</strong></article>
+          </div>
+          <div class="interpretation">
+            <h4>Expected response</h4>
+            <p id="interpretation-text">Select a mechanism to review the expected dependence of the voltammogram on its parameters.</p>
+          </div>
+          <details id="electrolyte-screen" class="advanced-settings result-diagnostic">
+            <summary>Check the supporting-electrolyte approximation</summary>
+            <div class="diagnostic-body">
+              <p class="helper-text">Use independently measured electrolyte properties to screen whether migration and diffuse charge are small enough to omit. This is a validity check for the current simulation, not a migration-corrected model.</p>
+              <div class="field-grid">
+                <label class="field"><span>Conductivity <b>S cm⁻¹</b></span><input id="electrolyte-conductivity" type="number" min="1e-12" step="0.001" value="0.01"></label>
+                <label class="field"><span>Ionic strength <b>mol L⁻¹</b></span><input id="electrolyte-ionic-strength" type="number" min="1e-12" step="0.01" value="0.1"></label>
+                <label class="field"><span>Reactant charge</span><input id="electrolyte-charge" type="number" step="1" value="1"></label>
+                <label class="field"><span>Diffusion coefficient <b>cm² s⁻¹</b></span><input id="electrolyte-diffusion" type="number" min="1e-20" step="0.000001" value="0.00001"></label>
+                <label class="field"><span>Relative permittivity</span><input id="electrolyte-permittivity" type="number" min="1e-12" step="0.1" value="78.4"></label>
+                <label class="field"><span>Diffuse-layer potential <b>V, optional</b></span><input id="electrolyte-diffuse-potential" type="number" step="0.001" placeholder="Not measured"></label>
+              </div>
+              <button id="electrolyte-check-button" class="button secondary small" type="button" disabled>Run validity screen</button>
+              <div id="electrolyte-error" class="error-message" role="alert" hidden></div>
+              <div id="electrolyte-report" class="diagnostic-report" aria-live="polite"></div>
+            </div>
+          </details>
+        </section>
+      </div>
+      </div>
+
+      <div id="view-builder" class="workbench-view">
+        <section class="intro-row">
+          <div><p class="eyebrow">Custom mechanism</p><h2>Define a reaction mechanism</h2><p>Specify solution or surface species, elementary reactions, adsorption, and rate laws.</p></div>
+          <div class="inline-actions builder-top-actions"><button id="builder-import-button" class="button secondary" type="button">Import JSON</button><button id="builder-export-button" class="button secondary" type="button">Export JSON</button><input id="builder-import-file" type="file" accept="application/json,.json" hidden></div>
+        </section>
+        <section class="full-panel">
+          <div class="section-heading"><span class="step-chip">A</span><div><h3>Species inventory</h3><p>Names become symbols in custom formulas, so use letters, numbers, and underscores.</p></div></div>
+          <div class="builder-species-head" aria-hidden="true"><span>Name</span><span>Phase</span><span>Charge z</span><span>Initial concentration</span><span>Diffusion coefficient</span><span>Fit</span><span></span></div>
+          <div id="builder-species" class="builder-species"></div>
+          <button id="builder-add-species" class="button secondary small action-button" type="button">Add species</button>
+        </section>
+        <section class="full-panel spaced">
+          <div class="section-heading"><span class="step-chip">B</span><div><h3>Elementary reactions</h3><p>Use separate forward and reverse rows for reversible homogeneous chemistry.</p></div></div>
+          <div id="builder-reactions" class="builder-reactions"></div>
+          <button id="builder-add-reaction" class="button secondary small action-button" type="button">Add reaction</button>
+          <details class="rate-language-help advanced-settings">
+            <summary>Custom rate-law formula reference</summary>
+            <div><p>Formulas can use species names, declared parameters, arithmetic, powers, and <code>exp</code>, <code>log</code>, <code>log10</code>, <code>sqrt</code>, <code>abs</code>, <code>min</code>, <code>max</code>, <code>sin</code>, <code>cos</code>, <code>tanh</code>, and <code>ifelse</code>.</p><p>Homogeneous rates return M s⁻¹. Heterogeneous rates return mol cm⁻² s⁻¹. Formula inputs use M for solution species and mol cm⁻² for surface coverages.</p></div>
+          </details>
+        </section>
+        <section class="full-panel spaced">
+          <div class="section-heading"><span class="step-chip">C</span><div><h3>Transport physics</h3><p>Use supported-electrolyte diffusion for routine work or solve migration and diffuse charge explicitly with PNP.</p></div></div>
+          <div class="field-grid">
+            <label class="field"><span>Transport model</span><select id="builder-transport"><option value="standard">Supported electrolyte (selected integrator)</option><option value="pnp">Poisson–Nernst–Planck (fully implicit)</option></select></label>
+          </div>
+          <div id="builder-pnp-settings" class="field-grid three spaced" hidden>
+            <label class="field"><span>Stern capacitance <b>μF cm⁻²</b></span><input id="builder-pnp-stern" type="number" min="1e-12" step="1" value="20"></label>
+            <label class="field"><span>Potential of zero charge <b>V</b></span><input id="builder-pnp-pzc" type="number" step="0.01" value="0"></label>
+            <label class="field"><span>Relative permittivity</span><input id="builder-pnp-permittivity" type="number" min="1e-12" step="0.1" value="78.4"></label>
+          </div>
+          <p id="builder-pnp-note" class="helper-text" hidden>Enter an integer charge for every mobile species and include all counterions. The bulk inventory must satisfy Σzᵢcᵢ = 0. PNP supplies Stern and diffuse-layer charging, so the empirical Cdl field is ignored.</p>
+        </section>
+        <section class="full-panel spaced builder-review">
+          <div class="section-heading"><span class="step-chip">D</span><div><h3>Validate and use</h3><p>The Rust/WebAssembly engine checks species, stoichiometry, parameters, and rate formulas before solving.</p></div></div>
+          <div class="inline-actions"><button id="builder-validate" class="button secondary" type="button">Validate mechanism</button><button id="builder-simulate" class="button primary" type="button">Simulate mechanism</button><button id="builder-example" class="button quiet" type="button">Restore EC example</button><button id="builder-pnp-example" class="button quiet" type="button">Load PNP redox example</button></div>
+          <div id="builder-error" class="error-message" role="alert" hidden></div>
+          <div id="builder-summary" class="empty-state builder-summary">Validate the mechanism to review its equations and browser compatibility.</div>
+        </section>
+      </div>
+
+      <div id="view-data" class="workbench-view">
+        <section class="intro-row"><div><p class="eyebrow">Parameter estimation · Step 1</p><h2>Add the experiments you want to fit</h2><p>Load one or more scan rates collected for the same fixed species inventory, confirm their normalization, then continue to parameter selection.</p></div></section>
+        <section class="full-panel">
+          <div class="section-heading"><span class="step-chip">A</span><div><h3>Import one or more voltammograms</h3><p>Select several files together or return later to add another batch. Every loaded experiment is fitted simultaneously.</p></div></div>
+          <label class="drop-zone" for="data-files"><strong>Choose one or more voltammogram files</strong><span>CSV or text files with time, potential, and current columns</span><input id="data-files" type="file" multiple accept=".csv,.txt,.dat"></label>
+          <div class="inline-actions"><button id="use-simulation-button" class="button secondary" type="button">Use latest simulation as data</button><button id="clear-data-button" class="button quiet" type="button">Clear study</button></div>
+          <div id="data-error" class="error-message" role="alert" hidden></div>
+        </section>
+        <section class="full-panel spaced">
+          <div class="section-heading"><span class="step-chip">B</span><div><h3>Study datasets <span id="dataset-count" class="dataset-count">0 loaded</span></h3><p>Confirm each scan rate, column mapping, unit conversion, current sign, and reference-potential shift before fitting.</p></div></div>
+          <div id="dataset-list" class="dataset-list"><div class="empty-state">No experimental files loaded yet.</div></div>
+          <div class="fit-next-row"><p>Your data are processed in memory and fitted together as one study. The application does not retain uploaded files.</p><button class="button primary" type="button" data-view-target="fit">Continue to parameter selection</button></div>
+        </section>
+      </div>
+
+      <div id="view-fit" class="workbench-view">
+        <section class="intro-row"><div><p class="eyebrow">Parameter estimation · Step 2</p><h2>Select the parameters to estimate</h2><p>Estimate the unknown quantities and hold independently measured quantities at their reported values.</p></div><button class="button secondary" type="button" data-view-target="data">Back to datasets</button></section>
+        <div class="analysis-grid">
+          <section class="full-panel">
+            <div class="section-heading"><span class="step-chip">A</span><div><h3>Forward model and parameter vector</h3><p>Select parameters supported by the number and range of experimental datasets.</p></div></div>
+            <label class="field"><span>Mechanism</span><select id="fit-preset"><option value="solution_e">Solution E</option><option value="custom">Mechanism builder model</option></select></label>
+            <div class="fit-explainer"><strong>Free and fixed quantities</strong><span><b>Checked:</b> estimated from the voltammograms. <b>Unchecked:</b> held at the displayed value. For custom models, make selections in the mechanism builder.</span></div>
+            <div id="fit-parameter-list" class="parameter-choice-grid"></div>
+            <div class="section-heading compact subheading"><span class="step-chip">B</span><div><h3>Optimization</h3><p>Deterministic multistart reduces dependence on a single starting guess. Review every warning before interpreting a fit.</p></div></div>
+            <div class="field-grid">
+              <label class="field"><span>Loss</span><select id="fit-loss"><option value="least_squares">Least squares</option><option value="student_t">Robust Student-t</option></select></label>
+              <label class="field robust-fit-setting" hidden><span>Student-t degrees of freedom</span><input id="fit-student-dof" type="number" min="1" max="100" step="0.5" value="4"></label>
+              <label class="field robust-fit-setting" hidden><span>Robust scale <b>fraction of peak current</b></span><input id="fit-robust-scale" type="number" min="0.000001" max="1" step="0.001" value="0.01"></label>
+              <label class="field"><span>Solver</span><select id="fit-solver"><option value="bdf1">Implicit BDF1</option><option value="bdf2">Implicit BDF2</option><option value="be_fe">BE/FE (semi-implicit)</option><option value="trap_ab2">TRAP/AB2 (semi-implicit)</option></select></label>
+              <label class="field"><span>Multistart runs</span><input id="fit-multistart" type="number" min="1" max="16" value="4"></label>
+              <label class="field"><span>Minimum timesteps</span><input id="fit-steps" type="number" min="50" max="50000" value="300"></label>
+              <label class="field"><span>Spatial grid points</span><input id="fit-grid" type="number" min="8" max="128" value="32"></label>
+              <label class="field"><span>Maximum iterations per start</span><input id="fit-iterations" type="number" min="1" max="1000" value="100"></label>
+            </div>
+            <div id="fit-error" class="error-message" role="alert" hidden></div>
+            <button id="fit-button" class="button primary run-button" type="button">Estimate selected parameters</button>
+          </section>
+          <section class="results-panel">
+            <div class="result-header"><div><p class="eyebrow">Fit result</p><h3>Parameter estimates</h3></div></div>
+            <div id="fit-summary" class="empty-state tall">Estimate the selected parameters to see results.</div>
+          </section>
+        </div>
+      </div>
+
+      <div id="view-discover" class="workbench-view">
+        <section class="intro-row"><div><p class="eyebrow">Model selection</p><h2>Discover plausible reaction networks</h2><p>Compare standard EC mechanisms or chemically balanced candidates, and retain mechanisms whose predicted currents cannot be distinguished by the supplied experiments.</p></div></section>
+        <section class="full-panel">
+          <div class="mode-tabs"><button class="mode-tab active" data-discovery-mode="library" type="button">Standard mechanism library</button><button class="mode-tab" data-discovery-mode="structured" type="button">Structured species search</button><button class="mode-tab" data-discovery-mode="sparse" type="button">Sparse rate law</button><button class="mode-tab" data-discovery-mode="catalytic" type="button">EC′ diagnostics</button></div>
+          <div id="discovery-library" class="discovery-mode active">
+            <div class="field-grid three">
+              <label class="field"><span>Bulk concentration <b>M</b></span><input id="discover-concentration" type="number" value="0.001" step="0.0001"></label>
+              <label class="field"><span>Diffusion estimate <b>cm² s⁻¹</b></span><input id="discover-diffusion" type="number" value="0.00001" step="0.000001"></label>
+              <label class="field"><span>EC′ substrate concentration <b>M</b></span><input id="discover-substrate" type="number" value="0.01" min="1e-15" step="any"></label>
+              <label class="field"><span>Information criterion</span><select id="discover-criterion"><option>AICc</option><option>AIC</option><option>BIC</option></select></label>
+              <label class="field"><span>Lower E⁰ bound <b>V</b></span><input id="discover-e0-lower" type="number" value="-0.5" step="0.05"></label>
+              <label class="field"><span>Upper E⁰ bound <b>V</b></span><input id="discover-e0-upper" type="number" value="0.5" step="0.05"></label>
+            </div>
+            <div class="candidate-preview standard-candidate-list"><label class="candidate-item"><input data-library-candidate="reversible_e" type="checkbox" checked><span>E (reversible)</span></label><label class="candidate-item"><input data-library-candidate="quasi_reversible_e" type="checkbox" checked><span>E (quasi-reversible)</span></label><label class="candidate-item"><input data-library-candidate="ee" type="checkbox"><span>EE</span></label><label class="candidate-item"><input data-library-candidate="ec" type="checkbox" checked><span>EC</span></label><label class="candidate-item"><input data-library-candidate="ce" type="checkbox" checked><span>CE</span></label><label class="candidate-item"><input data-library-candidate="ece" type="checkbox"><span>ECE</span></label><label class="candidate-item"><input data-library-candidate="ec_prime" type="checkbox"><span>EC′ catalytic</span></label><label class="candidate-item"><input data-library-candidate="surface_e" type="checkbox"><span>Surface-confined E</span></label><label class="candidate-item"><input data-library-candidate="e_adsorption" type="checkbox"><span>E + adsorption</span></label></div>
+            <label class="candidate-item"><input id="library-predictive-validation" type="checkbox"><span>Run leave-one-experiment-out predictive validation</span></label>
+            <p class="helper-text">Each candidate is fitted through the Rust transport model and ranked with a complexity penalty. Use at least three scan rates whenever possible.</p>
+            <button id="library-discovery-button" class="button primary action-button" type="button">Compare standard mechanisms</button>
+          </div>
+          <div id="discovery-structured" class="discovery-mode">
+            <p class="helper-text">Describe every known dissolved and surface-confined species, including zero-initial-amount intermediates. Composition uses JSON element counts such as {"C":6,"H":6}. Initial values are mol/L in solution and mol/cm² on the surface.</p>
+            <div id="species-editor" class="species-editor"></div>
+            <button id="add-species-button" class="button secondary small" type="button">Add species</button>
+            <div class="inline-actions"><button id="generate-candidates-button" class="button secondary" type="button">Generate balanced candidates</button><button id="structured-discovery-button" class="button primary" type="button">Run structured search</button></div>
+            <div class="field-grid three">
+              <label class="field"><span>Maximum molecularity</span><select id="structured-molecularity"><option value="1">Unimolecular</option><option value="2">Up to bimolecular</option></select></label>
+              <label class="field"><span>Maximum electrons</span><input id="structured-electrons" type="number" min="1" max="4" value="2"></label>
+              <label class="field"><span>Search criterion</span><select id="structured-criterion"><option>AICc</option><option>AIC</option><option>BIC</option></select></label>
+              <label class="field"><span>Search strategy</span><select id="structured-search-mode"><option value="auto">Automatic</option><option value="exhaustive">Exhaustive</option><option value="beam">Backward beam</option></select></label>
+              <label class="field"><span>Exhaustive support limit</span><input id="structured-exhaustive-limit" type="number" min="1" max="4095" value="64"></label>
+              <label class="field"><span>Beam fit budget</span><input id="structured-max-evaluations" type="number" min="1" max="500" value="50"></label>
+              <label class="field"><span>Bootstrap searches</span><input id="structured-stability" type="number" min="0" max="100" value="0"></label>
+              <label class="field"><span>Bootstrap seed</span><input id="structured-stability-seed" type="number" min="0" step="1" value="4873"></label>
+            </div>
+            <p class="helper-text">Automatic search enumerates every admissible support when the generated library has at most the selected limit; larger spaces use the beam budget.</p>
+            <p id="structured-search-estimate" class="helper-text">Generate candidates to estimate the number of fitted supports.</p>
+            <div id="candidate-preview" class="candidate-preview"></div>
+          </div>
+          <div id="discovery-sparse" class="discovery-mode">
+            <p class="helper-text">Start with the known species and electron-transfer steps in the mechanism builder. Choose one unresolved homogeneous reaction below. Each candidate polynomial rate is placed inside the transport model, fitted to the loaded voltammograms, and compared by its predicted current. Concentrations remain unobserved model states.</p>
+            <div class="field-grid three">
+              <label class="field"><span>Unresolved reaction</span><select id="voltammetric-rate-reaction"></select></label>
+              <label class="field"><span>Maximum polynomial degree</span><input id="voltammetric-rate-degree" type="number" min="1" max="3" value="2"></label>
+              <label class="field"><span>First-order coefficient guess <b>s⁻¹</b></span><input id="voltammetric-rate-guess" type="number" min="1e-12" step="any" value="5"></label>
+              <label class="field"><span>Information criterion</span><select id="voltammetric-rate-criterion"><option>AICc</option><option>AIC</option><option>BIC</option></select></label>
+              <label class="field"><span>Residual loss</span><select id="voltammetric-rate-loss"><option value="least_squares">Least squares</option><option value="student_t">Robust Student-t</option></select></label>
+              <label class="field voltammetric-robust-setting" hidden><span>Student-t degrees of freedom</span><input id="voltammetric-rate-dof" type="number" min="1" max="100" step="0.5" value="4"></label>
+              <label class="field voltammetric-robust-setting" hidden><span>Robust scale <b>fraction of peak current</b></span><input id="voltammetric-rate-scale" type="number" min="0.000001" max="1" step="0.001" value="0.01"></label>
+              <label class="field"><span>Search strategy</span><select id="voltammetric-rate-search"><option value="auto">Automatic</option><option value="exhaustive">Exhaustive</option><option value="beam">Backward beam</option></select></label>
+              <label class="field"><span>Exhaustive support limit</span><input id="voltammetric-rate-limit" type="number" min="1" max="4095" value="64"></label>
+              <label class="field"><span>Whole-experiment bootstrap replicates</span><input id="voltammetric-rate-stability" type="number" min="0" max="100" value="0"></label>
+              <label class="field"><span>Bootstrap seed</span><input id="voltammetric-rate-stability-seed" type="number" min="0" max="4294967295" value="4873"></label>
+            </div>
+            <p class="helper-text">Bootstrap stability is optional and needs at least three voltammograms. It resamples complete experiments to show how often each rate term wins; 20 replicates is a useful first check but requires roughly 20 additional searches.</p>
+            <label class="candidate-item"><input id="voltammetric-rate-predictive-validation" type="checkbox"><span>Validate the top support by holding out each complete voltammogram</span></label>
+            <div class="section-heading compact subheading"><span class="step-chip">C</span><div><h3>Candidate concentration inputs</h3><p>Select the species that may appear in the rate law and give a representative concentration for coefficient scaling.</p></div></div>
+            <div id="voltammetric-rate-inputs" class="candidate-preview"></div>
+            <p id="voltammetric-rate-estimate" class="helper-text"></p>
+            <button id="voltammetric-rate-button" class="button primary action-button" type="button">Infer rate law from voltammograms</button>
+            <details class="advanced-settings spaced"><summary>Optional concentration–rate regression check</summary><div>
+              <p class="helper-text">If independent concentration and local-rate measurements later become available, this secondary STLSQ utility can check a proposed expression without solving the voltammetry inverse problem.</p>
+              <label class="drop-zone" for="sparse-rate-file"><strong>Choose concentration–rate CSV</strong><span>The last column is rate; preceding columns are measured concentrations</span><input id="sparse-rate-file" type="file" accept=".csv,.txt,.dat"></label>
+              <div id="sparse-rate-summary" class="empty-state">No concentration–rate table loaded.</div>
+              <div class="field-grid three spaced"><label class="field"><span>Maximum polynomial degree</span><input id="sparse-degree" type="number" min="1" max="5" value="3"></label><label class="field"><span>Relative threshold</span><input id="sparse-threshold" type="number" min="0" max="0.99" step="0.01" value="0.05"></label></div>
+              <button id="sparse-discovery-button" class="button secondary action-button" type="button">Run concentration–rate check</button>
+            </div></details>
+          </div>
+          <div id="discovery-catalytic" class="discovery-mode">
+            <p class="helper-text">Estimate an ideal EC′ catalytic rate from a catalytic voltammogram and its matched substrate-free catalyst trace. These analytical checks assume reversible electron transfer, pseudo-first-order substrate excess, and either a linear foot or a flat kinetic plateau; the result reports failed applicability checks instead of silently accepting them.</p>
+            <div class="field-grid three">
+              <label class="field"><span>Catalytic trace</span><select id="catalytic-trace"></select></label>
+              <label class="field"><span>Substrate-free reference</span><select id="catalytic-reference"></select></label>
+              <label class="field"><span>Estimator</span><select id="catalytic-method"><option value="fowa">Foot of the wave</option><option value="plateau">Kinetic plateau</option></select></label>
+              <label class="field"><span>Formal potential <b>V</b></span><input id="catalytic-e0" type="number" step="any" value="0"></label>
+              <label class="field"><span>Substrate concentration <b>M</b></span><input id="catalytic-substrate" type="number" min="1e-15" step="any" value="0.01"></label>
+              <label class="field"><span>Catalyst concentration <b>M</b></span><input id="catalytic-catalyst" type="number" min="1e-15" step="any" value="0.001"></label>
+              <label class="field"><span>Electron count</span><input id="catalytic-electrons" type="number" min="1" max="8" step="1" value="1"></label>
+              <label class="field"><span>Minimum substrate excess</span><input id="catalytic-excess" type="number" min="0" step="any" value="10"></label>
+            </div>
+            <p class="helper-text">The two traces must share the same sampled potential grid. Use the import controls to normalize potential and current units before running this diagnostic.</p>
+            <button id="catalytic-rate-button" class="button primary action-button" type="button">Estimate catalytic rate</button>
+          </div>
+          <div id="discovery-error" class="error-message" role="alert" hidden></div>
+        </section>
+        <section class="full-panel spaced"><div class="result-header"><div><p class="eyebrow">Mechanism evidence</p><h3>Ranked models and reaction inclusion</h3></div></div><div id="discovery-results" class="empty-state">Run a discovery analysis to compare mechanisms.</div></section>
+      </div>
+
+      <div id="view-uncertainty" class="workbench-view">
+        <section class="intro-row"><div><p class="eyebrow">Parameter inference</p><h2>Assess uncertainty and identifiability</h2><p>Calculate profile likelihoods or sample the joint posterior for a fitted parameter vector or a selected voltammetric rate-law support.</p></div></section>
+        <div class="analysis-grid">
+          <section class="full-panel">
+            <div class="section-heading"><span class="step-chip">A</span><div><h3>Profile likelihood</h3><p>Pin one fitted parameter and refit the remainder.</p></div></div>
+            <label class="field"><span>Fitted parameter</span><select id="uncertainty-parameter"></select></label>
+            <div class="field-grid"><label class="field"><span>Grid points</span><input id="profile-points" type="number" min="5" max="31" step="2" value="9"></label><label class="field"><span>Span <b>SE</b></span><input id="profile-span" type="number" min="0.5" max="10" value="3"></label></div>
+            <button id="profile-button" class="button primary action-button" type="button">Calculate profile</button>
+            <div class="section-heading compact subheading"><span class="step-chip">B</span><div><h3>Posterior sampling</h3><p>Random-walk Metropolis around the fitted optimum.</p></div></div>
+            <div class="field-grid"><label class="field"><span>Retained samples</span><input id="posterior-samples" type="number" min="50" max="5000" value="500"></label><label class="field"><span>Burn-in steps</span><input id="posterior-burnin" type="number" min="0" max="5000" value="200"></label><label class="field"><span>Proposal scale</span><input id="posterior-scale" type="number" min="0.01" max="5" value="1"></label><label class="field"><span>Reproducibility seed</span><input id="posterior-seed" type="number" min="1" step="1" value="2026"></label></div>
+            <p class="helper-text">Posterior sampling requires finite lower and upper bounds for every fitted parameter. Results use independent uniform priors over those declared bounds.</p>
+            <button id="posterior-button" class="button secondary action-button" type="button">Sample posterior</button>
+            <div class="section-heading compact subheading"><span class="step-chip">C</span><div><h3>Measured fixed-input uncertainty</h3><p>Refit at ± one standard uncertainty for independently measured inputs, then combine their effects with the conditional fit covariance.</p></div></div>
+            <div class="field-grid three"><label class="field"><span>Fixed input</span><select id="known-input-target"></select></label><label class="field"><span>Measured value</span><input id="known-input-value" type="number" step="any"></label><label class="field"><span>Standard uncertainty</span><input id="known-input-se" type="number" min="0" step="any"></label><label class="field"><span>Lower bound <b>optional</b></span><input id="known-input-lower" type="number" step="any"></label><label class="field"><span>Upper bound <b>optional</b></span><input id="known-input-upper" type="number" step="any"></label><label class="field"><span>Unit</span><input id="known-input-unit" type="text"></label></div>
+            <button id="add-known-input-button" class="button secondary small" type="button">Add measured input</button>
+            <div id="known-input-list" class="candidate-preview"><div class="empty-state">No measured-input uncertainties added.</div></div>
+            <div class="field-grid spaced"><label class="field"><span>Confidence level</span><input id="known-input-level" type="number" min="0.5" max="0.999" step="0.01" value="0.95"></label><label class="field"><span>Nonlinearity warning threshold</span><input id="known-input-nonlinearity" type="number" min="0" step="0.05" value="0.25"></label></div>
+            <button id="known-input-button" class="button secondary action-button" type="button">Propagate measured uncertainty</button>
+            <div id="uncertainty-error" class="error-message" role="alert" hidden></div>
+          </section>
+          <section class="results-panel"><div class="result-header"><div><p class="eyebrow">Uncertainty result</p><h3>Confidence and identifiability</h3></div></div><div id="uncertainty-results" class="empty-state tall">Complete a parameter fit or choose a ranked rate law for UQ.</div></section>
+        </div>
+      </div>
+
+      <div id="view-guide" class="workbench-view">
+        <section class="intro-row"><div><p class="eyebrow">Reference</p><h2>Browser simulation guide</h2><p>How to define, run, compare, and export solution-mechanism simulations.</p></div></section>
+        <div class="guide-layout">
+          <section class="guide-steps">
+            <article><span>1</span><div><h3>Define and simulate the reaction</h3><p>Choose a reaction scheme or define a custom mechanism. Save a result when it should remain as a dashed comparison on subsequent simulations.</p><button class="text-link" type="button" data-view-target="simulate">Go to simulation →</button></div></article>
+            <article><span>2</span><div><h3>Build a custom mechanism</h3><p>Add up to 12 solution or surface species and 64 mass-action, adsorption, algebraic-rate, or electron-transfer steps. Import and export the mechanism as JSON when you want to preserve or share it.</p><button class="text-link" type="button" data-view-target="builder">Open the mechanism builder →</button></div></article>
+            <article><span>3</span><div><h3>Compare controlled variants</h3><p>Save a simulated trace, change one or more parameters, and run the model again. The saved trace remains available as a user-controlled dashed comparison; set a reaction rate to zero when you want a nonreactive reference.</p><button class="text-link" type="button" data-view-target="simulate">Compare simulations →</button></div></article>
+            <article><span>4</span><div><h3>Export calculated data</h3><p>Download the latest time, potential, and current arrays as CSV for plotting or analysis elsewhere. Keep the mechanism JSON with the exported trace so the calculation remains interpretable.</p><button class="text-link" type="button" data-view-target="simulate">Return to simulation →</button></div></article>
+          </section>
+          <aside class="guide-reference">
+            <h3>Current browser scope</h3>
+            <p>Forward simulation, solution/surface parameter fitting, profile and posterior uncertainty, measured-input propagation, standard-library and balanced-network discovery, direct-from-voltammogram sparse rate-law inference, EC′ analytical diagnostics, PNP transport, and electrografting run entirely in Rust/WebAssembly. Neural UDE training and inference are intentionally excluded.</p>
+            <h3>Circuit elements</h3>
+            <p>Uncompensated resistance and double-layer capacitance are coupled to the interfacial potential for supported-electrolyte templates and declarative mechanisms. PNP instead resolves Stern and diffuse-layer charging explicitly.</p>
+            <h3>Scientific use</h3>
+              <ul><li>Confirm the potential convention and units before interpreting a result.</li><li>Check grid and timestep convergence for conclusions that depend on small shape changes.</li><li>Use saved traces for explicit comparisons; EchemLab does not generate an automatic background.</li><li>Treat a selected rate law as a plausible model unless competing supports, correlations, and follow-up experiments establish identifiability.</li></ul>
+            <h3>Units used by the model</h3>
+            <p>Solution concentration: M<br>Diffusion: cm² s⁻¹<br>Current: A<br>Potential: V</p>
+          </aside>
+        </div>
+      </div>
+
+    </main>
+  </div>
+  <script src="wasm-engine.js" defer></script>
+  <script src="import_data.js" defer></script>
+  <script src="app.js" defer></script>
+  <script src="mechanism_builder.js" defer></script>
+  <script src="fit-workflow.js" defer></script>
+  <script src="discovery-workflow.js" defer></script>
+</body>
+</html>
