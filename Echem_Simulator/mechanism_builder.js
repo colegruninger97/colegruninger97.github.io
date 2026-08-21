@@ -98,6 +98,22 @@ function parseReactionSide(text) {
   return [...totals].map(([species,stoich])=>({species,stoich}));
 }
 
+function surfaceProducts(reaction) {
+  try {
+    return parseReactionSide(reaction.productsText)
+      .map(participant=>participant.species)
+      .filter(name=>customMechanism.species.some(species=>species.name===name&&species.phase==="surface"));
+  } catch {
+    return [];
+  }
+}
+
+function siteOccupants(reaction) {
+  const selected=Array.isArray(reaction.blockingSpecies)?reaction.blockingSpecies:[];
+  const names=[...surfaceProducts(reaction),...selected];
+  return [...new Set(names)].filter(name=>customMechanism.species.some(species=>species.name===name&&species.phase==="surface"));
+}
+
 function reactionEditorReadiness() {
   const names=customMechanism.species.map(species=>String(species.name||"").trim());
   if(names.length<2)return "Add at least two species and assign each one a phase before defining reactions.";
@@ -184,7 +200,7 @@ function serializeCustomModel() {
       reactants:parseReactionSide(r.reactantsText),products:parseReactionSide(r.productsText),
       parameters:custom?structuredClone(syncCustomParameters(r)):structuredClone(r.parameters),
       formula:custom?String(r.formula||"").trim():"",
-      blocking_species:["adsorption","electroadsorption"].includes(r.type)?String(r.blockingText||"").split(",").map(name=>name.trim()).filter(Boolean):[]};
+      blocking_species:["adsorption","electroadsorption"].includes(r.type)?siteOccupants(r):[]};
   });
   return {name:customMechanism.name||"Custom mechanism",species,reactions};
 }
@@ -196,11 +212,11 @@ function hydrateCustomModel(raw) {
   const unsupportedReaction=raw.reactions.find(reaction=>!Object.prototype.hasOwnProperty.call(reactionTypeLabels,reaction.type||"bulk_mass_action"));
   if(unsupportedReaction)throw new Error(`Reaction “${unsupportedReaction.label||"unnamed"}” uses an unsupported surface reaction type.`);
   customMechanism={name:raw.name||"Imported mechanism",
-    species:raw.species.map(s=>({name:s.name||"Species",phase:s.phase||"solution",charge:Math.trunc(Number(s.charge||0)),initial:Number(s.initial||0),D:Number(s.D||0),fit_D:Boolean(s.fit_D),D_lower:Number(s.D_lower||1e-9),D_upper:Number(s.D_upper||1e-3)})),
+    species:raw.species.map(s=>({name:s.name||"Species",phase:s.phase||"solution",charge:Math.trunc(Number(s.charge||0)),initial:Number(s.initial||0),D:s.phase==="surface"?0:Number(s.D||0),fit_D:s.phase==="solution"&&Boolean(s.fit_D),D_lower:Number(s.D_lower||1e-9),D_upper:Number(s.D_upper||1e-3)})),
     reactions:raw.reactions.map((r,i)=>({label:r.label||`Reaction ${i+1}`,type:r.type||"bulk_mass_action",
       reactantsText:r.reactantsText??sideToText(r.reactants),productsText:r.productsText??sideToText(r.products),
       parameters:Object.fromEntries(Object.entries(r.parameters||parametersForType(r.type||"bulk_mass_action")).map(([name,parameter])=>[name,{...(typeof parameter==="number"?{value:parameter}:parameter),fit:Boolean(typeof parameter==="object"&&parameter.fit)}])),formula:r.formula||"",
-      parameterText:r.parameterText||Object.entries(r.parameters||{}).map(([n,p])=>`${n}=${typeof p==="number"?p:p.value}`).join("; "),blockingText:(r.blocking_species||[]).join(", ")}))};
+      parameterText:r.parameterText||Object.entries(r.parameters||{}).map(([n,p])=>`${n}=${typeof p==="number"?p:p.value}`).join("; "),blockingSpecies:[...(r.blocking_species||[])]}))};
   customMechanismRevision+=1;
   renderCustomMechanism();
   if(typeof renderBrowserFitParameters==="function")renderBrowserFitParameters();
@@ -263,19 +279,38 @@ function renderBuilderSpecies() {
     <input aria-label="Species name" data-builder-species="${i}" data-builder-species-key="name" value="${escapeHTML(s.name)}">
     <select aria-label="Species phase" data-builder-species="${i}" data-builder-species-key="phase"><option value="" ${!["solution","surface"].includes(s.phase)?"selected":""}>choose phase…</option><option value="solution" ${s.phase==="solution"?"selected":""}>solution</option><option value="surface" ${s.phase==="surface"?"selected":""}>surface</option></select>
     <input aria-label="Species charge" data-builder-species="${i}" data-builder-species-key="charge" type="number" step="1" value="${Number(s.charge||0)}" ${s.phase!=="solution"?`disabled title="${s.phase==="surface"?"PNP charge applies to mobile species":"Choose a phase first"}"`:""}>
-    <input aria-label="Initial amount" data-builder-species="${i}" data-builder-species-key="initial" type="number" value="${s.initial}" step="any">
-    <input aria-label="Diffusion coefficient" data-builder-species="${i}" data-builder-species-key="D" type="number" value="${s.D}" step="any" ${s.phase!=="solution"?`disabled title="${s.phase==="surface"?"Surface coverage does not diffuse":"Choose a phase first"}"`:""}>
+    <label class="builder-value-with-unit"><span class="sr-only">Initial ${s.phase==="surface"?"surface coverage":"concentration"}</span><input aria-label="Initial ${s.phase==="surface"?"surface coverage":"concentration"}" data-builder-species="${i}" data-builder-species-key="initial" type="number" value="${s.initial}" step="any"><small>${s.phase==="surface"?"mol cm⁻²":s.phase==="solution"?"M":"choose phase"}</small></label>
+    ${s.phase==="solution"?`<label class="builder-value-with-unit"><span class="sr-only">Diffusion coefficient</span><input aria-label="Diffusion coefficient" data-builder-species="${i}" data-builder-species-key="D" type="number" value="${s.D}" step="any"><small>cm² s⁻¹</small></label>`:`<span class="surface-species-na" aria-label="Diffusion coefficient not applicable">${s.phase==="surface"?"Not applicable":"Choose phase"}</span>`}
     <button class="remove-dataset" data-builder-remove-species="${i}" type="button" aria-label="Remove ${escapeHTML(s.name)}">×</button>
   </div>`).join("");
   $$('[data-builder-species-key]').forEach(input=>input.addEventListener("change",()=>{
     const species=customMechanism.species[+input.dataset.builderSpecies],key=input.dataset.builderSpeciesKey;
+    const previousPhase=species.phase;
     species[key]=key==="name"||key==="phase"?input.value:+input.value;
+    if(key==="phase"&&species.phase!==previousPhase){
+      species.initial=0;
+      species.D=species.phase==="solution"?1e-5:0;
+      species.fit_D=false;
+    }
     markMechanismChanged();
     renderBuilderSpecies();
     if(key==="name"||key==="phase")renderBuilderReactions();
   }));
   $$('[data-builder-remove-species]').forEach(button=>button.addEventListener("click",()=>{customMechanism.species.splice(+button.dataset.builderRemoveSpecies,1);markMechanismChanged();renderBuilderSpecies();renderBuilderReactions();}));
   syncTransportControls();
+}
+
+function siteOccupancyRows(reaction,index) {
+  const products=surfaceProducts(reaction);
+  const productSet=new Set(products);
+  const selected=new Set(siteOccupants(reaction));
+  const competitors=customMechanism.species
+    .filter(species=>species.phase==="surface"&&!productSet.has(species.name));
+  const productsMarkup=products.map(name=>`<label class="site-occupant required"><input type="checkbox" checked disabled><span><strong>${escapeHTML(name)}</strong><small>Surface product · always occupies one site</small></span></label>`).join("");
+  const competitorsMarkup=competitors.length
+    ? competitors.map(species=>`<label class="site-occupant"><input type="checkbox" data-builder-site-occupant="${index}" value="${escapeHTML(species.name)}" ${selected.has(species.name)?"checked":""}><span><strong>${escapeHTML(species.name)}</strong><small>Competes for the same site pool</small></span></label>`).join("")
+    : `<p class="helper-text site-occupancy-empty">No other surface species are available to compete for these sites.</p>`;
+  return `<fieldset class="site-occupancy-field"><legend>Surface-site occupancy</legend><p>The surface product is counted automatically. Select only additional surface species that occupy the same one-site Langmuir pool.</p><div class="site-occupant-grid">${productsMarkup}${competitorsMarkup}</div></fieldset>`;
 }
 
 function parameterRows(reaction,index) {
@@ -287,9 +322,9 @@ function parameterRows(reaction,index) {
     <label class="field"><span>Parameters <b>name=value; …</b></span><input data-builder-reaction="${index}" data-builder-reaction-key="parameterText" value="${escapeHTML(reaction.parameterText||"")}" placeholder="k=1.0; Km=0.001"></label>
   </div>`;
   }
-  const blocking=["adsorption","electroadsorption"].includes(reaction.type)?`<label class="field"><span>Blocking surface species <b>comma-separated; blank = product</b></span><input data-builder-reaction="${index}" data-builder-reaction-key="blockingText" value="${escapeHTML(reaction.blockingText||"")}" placeholder="Adsorbed, Inhibitor"></label>`:"";
+  const occupancy=["adsorption","electroadsorption"].includes(reaction.type)?siteOccupancyRows(reaction,index):"";
   return `<div class="builder-parameter-head" aria-hidden="true"><span>Parameter</span><span>Simulation value</span></div>`+
-    Object.entries(reaction.parameters).map(([name,p])=>`<div class="builder-parameter-row"><span><strong>${escapeHTML(name)}</strong><small>${escapeHTML(reactionParameterMeta[reaction.type]?.[name]?.[5]||"")}</small></span><input aria-label="${name} simulation value" data-builder-param="${index}" data-builder-param-name="${name}" data-builder-param-key="value" type="number" step="any" value="${p.value}"></div>`).join("")+blocking;
+    Object.entries(reaction.parameters).map(([name,p])=>`<div class="builder-parameter-row"><span><strong>${escapeHTML(name)}</strong><small>${escapeHTML(reactionParameterMeta[reaction.type]?.[name]?.[5]||"")}</small></span><input aria-label="${name} simulation value" data-builder-param="${index}" data-builder-param-name="${name}" data-builder-param-key="value" type="number" step="any" value="${p.value}"></div>`).join("")+occupancy;
 }
 
 function renderBuilderReactions() {
@@ -315,8 +350,9 @@ function renderBuilderReactions() {
   </article>`;}).join("");
   $$('[data-builder-reaction-key]').forEach(input=>input.addEventListener("input",()=>{customMechanism.reactions[+input.dataset.builderReaction][input.dataset.builderReactionKey]=input.value;markMechanismChanged();}));
   $$('[data-builder-reaction-key="reactantsText"], [data-builder-reaction-key="productsText"]').forEach(input=>input.addEventListener("change",renderBuilderReactions));
-  $$('[data-builder-reaction-type]').forEach(select=>select.addEventListener("change",()=>{const r=customMechanism.reactions[+select.dataset.builderReactionType];r.type=select.value;r.formula=select.value.startsWith("custom_")?"k*"+(customMechanism.species[0]?.name||"A"):"";r.parameterText=select.value.startsWith("custom_")?"k=1":"";r.parameters=select.value.startsWith("custom_")?inferCustomParameters(r.parameterText):parametersForType(select.value);markMechanismChanged();renderBuilderReactions();}));
+  $$('[data-builder-reaction-type]').forEach(select=>select.addEventListener("change",()=>{const r=customMechanism.reactions[+select.dataset.builderReactionType];r.type=select.value;r.formula=select.value.startsWith("custom_")?"k*"+(customMechanism.species[0]?.name||"A"):"";r.parameterText=select.value.startsWith("custom_")?"k=1":"";r.parameters=select.value.startsWith("custom_")?inferCustomParameters(r.parameterText):parametersForType(select.value);r.blockingSpecies=[];markMechanismChanged();renderBuilderReactions();}));
   $$('[data-builder-param]').forEach(input=>input.addEventListener("change",()=>{const p=customMechanism.reactions[+input.dataset.builderParam].parameters[input.dataset.builderParamName];p[input.dataset.builderParamKey]=+input.value;markMechanismChanged();}));
+  $$('[data-builder-site-occupant]').forEach(input=>input.addEventListener("change",()=>{const index=+input.dataset.builderSiteOccupant;customMechanism.reactions[index].blockingSpecies=$$(`[data-builder-site-occupant="${index}"]:checked`).map(checkbox=>checkbox.value);markMechanismChanged();}));
   $$('[data-builder-reaction-key="parameterText"]').forEach(input=>input.addEventListener("change",()=>{const reaction=customMechanism.reactions[+input.dataset.builderReaction];syncCustomParameters(reaction);markMechanismChanged();renderBuilderReactions();}));
   $$('[data-builder-remove-reaction]').forEach(button=>button.addEventListener("click",()=>{customMechanism.reactions.splice(+button.dataset.builderRemoveReaction,1);markMechanismChanged();renderBuilderReactions();}));
   syncTransportControls();
