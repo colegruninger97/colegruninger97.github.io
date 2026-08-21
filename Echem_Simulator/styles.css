@@ -315,6 +315,15 @@ main { width: min(1380px, 100%); margin: 0 auto; padding: 27px clamp(22px,3vw,48
 .site-occupant strong { color: var(--ink); font-size: 10px; }
 .site-occupant small { margin-top: 2px; color: var(--muted); font-size: 9px; line-height: 1.35; }
 .site-occupancy-empty { grid-column: 1/-1; margin: 0; }
+.reaction-math { margin-top: 12px; border: 1px solid #d8e2df; border-radius: 8px; background: #f8faf9; }
+.reaction-math summary { padding: 10px 12px; color: var(--teal-dark); cursor: pointer; font-size: 10px; font-weight: 800; }
+.reaction-math > div { padding: 0 12px 12px; }
+.reaction-math p { margin: 7px 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.reaction-math pre { margin: 9px 0 0; padding: 10px; overflow-x: auto; color: #e9f5f3; background: #173a3a; border-radius: 7px; font-size: 10px; line-height: 1.5; }
+.reaction-math code { font-family: "SFMono-Regular",Consolas,"Liberation Mono",monospace; }
+.math-expression { margin: 9px 0; padding: 10px; overflow-x: auto; color: var(--ink); background: white; border-left: 3px solid var(--copper); font: 13px Georgia,serif; white-space: nowrap; }
+.kinetic-scale { margin-top: 9px; padding: 9px 10px; color: var(--teal-dark); background: #e8f4f1; border-radius: 7px; font-size: 10px; line-height: 1.5; }
+.kinetic-scale.warning { color: #7b5428; background: #fff1d9; }
 .custom-rate-grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 10px; }
 .rate-language-help { margin-top: 18px; }
 .rate-language-help > div { padding: 0 13px 12px; color: var(--muted); font-size: 11px; line-height: 1.55; }
