@@ -113,6 +113,20 @@
       });
 
       switch (payload?.preset) {
+        case "solution_e":
+          return {
+            name: "Solution E mechanism",
+            species: [
+              species("Ox", payload.bulk_concentration),
+              species("Red")
+            ],
+            reactions: [
+              electronTransfer(
+                "Electron transfer", "Ox", "Red",
+                payload.formal_potential, payload.electron_transfer_rate
+              )
+            ]
+          };
         case "solution_ecprime":
           return {
             name: "Solution EC-prime mechanism",

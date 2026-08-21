@@ -1,15 +1,12 @@
 "use strict";
 
-const solutionFitDefinitions = [
-  {name:"formal_potential",label:"Formal potential E⁰",unit:"V",initial:0,transform:"identity",lower:-0.5,upper:0.5,fit:true},
-  {name:"electron_transfer_rate",label:"Electron-transfer rate k⁰",unit:"cm s⁻¹",initial:0.01,transform:"log",lower:1e-9,upper:100,fit:true},
-  {name:"diffusion_coefficient",label:"Diffusion coefficient D",unit:"cm² s⁻¹",initial:1e-5,transform:"log",lower:1e-9,upper:1e-3,fit:false}
-];
 let latestBrowserFit = null;
 let latestBrowserFitPayload = null;
 let latestBrowserUncertaintyTarget = null;
 let dataQualitySequence = 0;
 let latestDataQualityReport = null;
+let customFitParameterState = {};
+let customFitParameterRevision = -1;
 
 function fitSelectOptions(values,current) {
   return values.map(([value,label])=>`<option value="${value}" ${String(value)===String(current)?"selected":""}>${escapeHTML(label)}</option>`).join("");
@@ -70,7 +67,8 @@ async function refreshDataQuality() {
 function renderBrowserDatasets() {
   const output=$("#dataset-list");
   $("#dataset-count").textContent=`${experimentalDatasets.length} loaded`;
-  if(!experimentalDatasets.length){output.innerHTML='<div class="empty-state">No experimental files loaded yet.</div>';return;}
+  $("#fit-next-button").disabled=!experimentalDatasets.length;
+  if(!experimentalDatasets.length){output.innerHTML='<div class="empty-state">No experimental files loaded yet.</div>';renderBrowserFitParameters();return;}
   output.innerHTML=experimentalDatasets.map((dataset,index)=>{
     let low=Infinity,high=-Infinity;for(const potential of dataset.potential){low=Math.min(low,potential);high=Math.max(high,potential);}
     const overrides=Object.keys(dataset.initial_concentrations||{}).length+Object.keys(dataset.initial_coverages||{}).length;
@@ -94,25 +92,27 @@ function renderBrowserDatasets() {
     try{ElectrochemImport.normalizeImportedDataset(dataset);error.hidden=true;renderBrowserDatasets();}
     catch(problem){error.textContent=problem.message;error.hidden=false;}
   }));
+  renderBrowserFitParameters();
   void refreshDataQuality();
-}
-
-function solutionFitParameterCards() {
-  const cards=solutionFitDefinitions.map(definition=>`<article class="parameter-estimate-card"><label class="parameter-estimate-toggle"><input data-solution-fit="${definition.name}" type="checkbox" ${definition.fit?"checked":""}><span><strong>Estimate ${escapeHTML(definition.label)}</strong><small>${escapeHTML(definition.transform)} coordinate</small></span></label><label class="parameter-start-value"><span>Starting / fixed value <b>${escapeHTML(definition.unit)}</b></span><input data-fit-value="${definition.name}" type="number" step="any" value="${definition.initial}"></label><label class="parameter-start-value"><span>Lower bound</span><input data-fit-lower="${definition.name}" type="number" step="any" value="${definition.lower}"></label><label class="parameter-start-value"><span>Upper bound</span><input data-fit-upper="${definition.name}" type="number" step="any" value="${definition.upper}"></label></article>`).join("");
-  return cards+`<article class="parameter-estimate-card"><div class="parameter-fixed-value"><span>Default Ox bulk concentration</span><strong><input id="fit-bulk-concentration" type="number" min="0" step="any" value="0.001"> <small>M</small></strong></div><small>Each loaded experiment can override Ox in its Experiment conditions.</small></article>`;
 }
 
 function customFitParameterCards() {
   let entries=[];
   try{entries=customFitParameterEntries();}catch(error){return `<div class="model-warning">${escapeHTML(error.message)}</div>`;}
-  if(!entries.length)return '<div class="empty-state">Define a supported mechanism in the builder first.</div>';
-  return `<div class="fit-explainer"><strong>Mechanism-builder selection</strong><span>These checkboxes update the same fit flags shown in the builder. Bounds and starting values remain attached to the mechanism JSON. Diffusion fitting is advanced: normally fix D independently unless multiple scan rates and known concentrations and area constrain it.</span></div>`+entries.map(entry=>`<article class="parameter-estimate-card"><label class="parameter-estimate-toggle"><input data-custom-fit="${escapeHTML(entry.id)}" type="checkbox" ${entry.fit?"checked":""}><span><strong>Estimate ${escapeHTML(entry.label)}</strong><small>${escapeHTML(entry.id)}</small></span></label><div class="parameter-fixed-value"><span>Starting / fixed value</span><strong>${Number(entry.value).toPrecision(5)} <small>${escapeHTML(entry.unit)}</small></strong></div></article>`).join("");
+  if(!entries.length)return '<div class="empty-state">Define at least one continuous parameter in the active reaction setup first.</div>';
+  if(customFitParameterRevision!==customMechanismRevision){
+    customFitParameterState=Object.fromEntries(entries.map(entry=>[entry.id,{fit:Boolean(entry.fit),value:Number(entry.value),lower:Number(entry.lower),upper:Number(entry.upper),transform:entry.transform}]));
+    customFitParameterRevision=customMechanismRevision;
+  }
+  entries=entries.map(entry=>({...entry,...customFitParameterState[entry.id]}));
+  return `<div class="fit-explainer"><strong>Active editable reaction setup</strong><span>The simulation values supply the initial guesses below. Select only parameters that the loaded experiments can constrain. Diffusion fitting is advanced: normally fix D independently unless multiple scan rates and known concentrations and electrode area constrain it.</span></div>`+entries.map(entry=>`<article class="parameter-estimate-card"><label class="parameter-estimate-toggle"><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="fit" type="checkbox" ${entry.fit?"checked":""}><span><strong>Estimate ${escapeHTML(entry.label)}</strong><small>${escapeHTML(entry.transform)} coordinate${entry.advanced?" · advanced":""}</small></span></label><label class="parameter-start-value"><span>Starting / fixed value <b>${escapeHTML(entry.unit)}</b></span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="value" type="number" step="any" value="${entry.value}"></label><label class="parameter-start-value"><span>Lower bound</span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="lower" type="number" step="any" value="${entry.lower}"></label><label class="parameter-start-value"><span>Upper bound</span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="upper" type="number" step="any" value="${entry.upper}"></label></article>`).join("");
 }
 
 function renderBrowserFitParameters() {
-  const custom=$("#fit-preset").value==="custom";
-  $("#fit-parameter-list").innerHTML=custom?customFitParameterCards():solutionFitParameterCards();
-  $$('[data-custom-fit]').forEach(input=>input.addEventListener("change",()=>setCustomFitSelection(input.dataset.customFit,input.checked)));
+  if(!experimentalDatasets.length){$("#fit-parameter-list").innerHTML='<div class="empty-state">Load at least one voltammogram before choosing parameters to estimate.</div>';$("#fit-button").disabled=true;return;}
+  $("#fit-parameter-list").innerHTML=customFitParameterCards();
+  $("#fit-button").disabled=false;
+  $$('[data-custom-fit]').forEach(input=>input.addEventListener("change",()=>{const state=customFitParameterState[input.dataset.customFit];if(state)state[input.dataset.customFitKey]=input.dataset.customFitKey==="fit"?input.checked:Number(input.value);}));
 }
 
 function browserFitDatasets() {
@@ -138,20 +138,10 @@ function fitSettings() {
   };
 }
 
-function solutionFitPayload() {
-  const values=Object.fromEntries(solutionFitDefinitions.map(definition=>[definition.name,Number($(`[data-fit-value="${definition.name}"]`).value)]));
-  const parameters=solutionFitDefinitions.filter(definition=>$(`[data-solution-fit="${definition.name}"]`).checked).map(definition=>({
-    name:definition.name,initial:values[definition.name],transform:definition.transform,
-    lower:Number($(`[data-fit-lower="${definition.name}"]`).value),
-    upper:Number($(`[data-fit-upper="${definition.name}"]`).value)
-  }));
-  return {preset:"solution_e",...fitSettings(),bulk_concentration:Number($("#fit-bulk-concentration").value),
-    diffusion_coefficient:values.diffusion_coefficient,formal_potential:values.formal_potential,
-    electron_transfer_rate:values.electron_transfer_rate,parameters};
-}
-
 function customFitPayload() {
-  return {preset:"custom",...fitSettings(),custom_model:serializeCustomModel()};
+  const model=serializeCustomModel();
+  for(const [id,settings] of Object.entries(customFitParameterState))applyCustomFitParameter(model,id,settings);
+  return {preset:"custom",...fitSettings(),custom_model:model};
 }
 
 function fitNumber(value,digits=5) {
@@ -195,21 +185,20 @@ async function runBrowserFit() {
   if(!experimentalDatasets.length){error.textContent="Load at least one voltammogram first.";error.hidden=false;return;}
   button.disabled=true;button.textContent="Estimating parameters…";
   try{
-    const custom=$("#fit-preset").value==="custom",payload=custom?customFitPayload():solutionFitPayload();
+    const payload=customFitPayload();
     const engine=window.electrochemBrowserEngine;
     const preflight=await engine.inspectData(payload.datasets);
     latestDataQualityReport=preflight;
     if(!preflight.passed)throw new Error(`Data preflight found ${preflight.error_count} blocking error${preflight.error_count===1?"":"s"}. Review the loaded voltammogram cards before fitting.`);
-    let result;
-    if(custom){if(!engine.supportsCustomFit(payload))throw new Error("Select at least one continuous mechanism parameter for custom fitting.");result=await engine.fitCustom(payload);}
-    else{if(!engine.supportsFit(payload))throw new Error("Select at least one solution-E parameter.");result=await engine.fitSolutionE(payload);}
+    if(!engine.supportsCustomFit(payload))throw new Error("Select at least one continuous parameter from the active reaction setup.");
+    const result=await engine.fitCustom(payload);
     latestBrowserFit=result;latestBrowserFitPayload=payload;
-    latestBrowserUncertaintyTarget={kind:custom?"custom":"solution_e",payload};
+    latestBrowserUncertaintyTarget={kind:"custom",payload};
     if(typeof renderKnownInputOptions==="function")renderKnownInputOptions();
     $("#uncertainty-parameter").innerHTML=result.estimates.map(estimate=>`<option value="${escapeHTML(estimate.name)}">${escapeHTML(estimate.name)}</option>`).join("");
     renderFitResult(result);
   }catch(problem){error.textContent=problem.message;error.hidden=false;}
-  finally{button.disabled=false;button.textContent="Estimate selected parameters";}
+  finally{button.disabled=!experimentalDatasets.length;button.textContent="Estimate selected parameters";}
 }
 
 $("#data-files").addEventListener("change",async event=>{
@@ -223,11 +212,10 @@ $("#data-files").addEventListener("change",async event=>{
 $("#use-simulation-button").addEventListener("click",()=>{
   const error=$("#data-error");error.hidden=true;
   if(!latestResult){error.textContent="Run a simulation first.";error.hidden=false;return;}
-  experimentalDatasets.push({id:++datasetSequence,name:`${latestResult.preset} simulation`,time:[...latestResult.time],potential:[...latestResult.potential],current:[...latestResult.series[0].current],scan_rate:Number($('[data-key="scan_rate"]').value),initial_concentrations:{},initial_coverages:{}});
+  experimentalDatasets.push({id:++datasetSequence,name:`${customMechanism.name} simulation`,time:[...latestResult.time],potential:[...latestResult.potential],current:[...latestResult.series[0].current],scan_rate:Number($('[data-key="scan_rate"]').value),initial_concentrations:{},initial_coverages:{}});
   renderBrowserDatasets();
 });
 $("#clear-data-button").addEventListener("click",()=>{experimentalDatasets.length=0;renderBrowserDatasets();});
-$("#fit-preset").addEventListener("change",renderBrowserFitParameters);
 $("#fit-loss").addEventListener("change",()=>{$$(".robust-fit-setting").forEach(field=>{field.hidden=$("#fit-loss").value!=="student_t";});});
 $("#fit-button").addEventListener("click",runBrowserFit);
 renderBrowserDatasets();

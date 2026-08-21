@@ -69,6 +69,7 @@ function defaultPnpMechanism() {
 }
 
 let customMechanism = defaultCustomMechanism();
+let customMechanismRevision = 0;
 
 function sideToText(side) {
   return (side||[]).map(x=>`${Number(x.stoich||1)===1?"":`${x.stoich} `}${x.species}`).join(" + ");
@@ -139,7 +140,29 @@ function hydrateCustomModel(raw) {
       reactantsText:r.reactantsText??sideToText(r.reactants),productsText:r.productsText??sideToText(r.products),
       parameters:Object.fromEntries(Object.entries(r.parameters||parametersForType(r.type||"bulk_mass_action")).map(([name,parameter])=>[name,{...(typeof parameter==="number"?{value:parameter}:parameter),fit:Boolean(typeof parameter==="object"&&parameter.fit)}])),formula:r.formula||"",
       parameterText:r.parameterText||Object.entries(r.parameters||{}).map(([n,p])=>`${n}=${typeof p==="number"?p:p.value}`).join("; "),blockingText:(r.blocking_species||[]).join(", ")}))};
+  customMechanismRevision+=1;
   renderCustomMechanism();
+  if(typeof renderBrowserFitParameters==="function")renderBrowserFitParameters();
+}
+
+function markMechanismChanged() {
+  customMechanismRevision+=1;
+  currentPreset="custom";
+  $("#preset-select").value="custom";
+  $("#mechanism-equation").textContent="Custom reaction setup";
+  $("#template-note").textContent="Edited from a template. Validate the setup to review its current equations before simulation.";
+  $("#interpretation-text").textContent="This editable reaction setup will be used directly for the next simulation.";
+  $("#builder-summary").className="empty-state builder-summary";
+  $("#builder-summary").textContent="Reaction setup changed. Validate it to review the current equations.";
+  setBuilderError();
+  if(typeof renderBrowserFitParameters==="function")renderBrowserFitParameters();
+}
+
+function setBuilderTransport(transport) {
+  const pnp=transport==="pnp";
+  $("#builder-transport").value=pnp?"pnp":"standard";
+  $("#builder-pnp-settings").hidden=!pnp;
+  $("#builder-pnp-note").hidden=!pnp;
 }
 
 function renderBuilderSpecies() {
@@ -149,29 +172,28 @@ function renderBuilderSpecies() {
     <input aria-label="Species charge" data-builder-species="${i}" data-builder-species-key="charge" type="number" step="1" value="${Number(s.charge||0)}" ${s.phase==="surface"?"disabled title=\"PNP charge applies to mobile species\"":""}>
     <input aria-label="Initial amount" data-builder-species="${i}" data-builder-species-key="initial" type="number" value="${s.initial}" step="any">
     <input aria-label="Diffusion coefficient" data-builder-species="${i}" data-builder-species-key="D" type="number" value="${s.D}" step="any" ${s.phase==="surface"?"disabled title=\"Surface coverage does not diffuse\"":""}>
-    <label class="fit-toggle" ${s.phase==="surface"?"":'title="Advanced: use several scan rates and independently known concentration and electrode area"'}><input aria-label="Estimate ${escapeHTML(s.name)} diffusion coefficient (advanced)" data-builder-species="${i}" data-builder-species-key="fit_D" type="checkbox" ${s.fit_D?"checked":""} ${s.phase==="surface"?"disabled":""}>${s.phase==="surface"?"Coverage Γ":"Estimate D"}</label>
     <button class="remove-dataset" data-builder-remove-species="${i}" type="button" aria-label="Remove ${escapeHTML(s.name)}">×</button>
   </div>`).join("");
   $$('[data-builder-species-key]').forEach(input=>input.addEventListener("change",()=>{
     const species=customMechanism.species[+input.dataset.builderSpecies],key=input.dataset.builderSpeciesKey;
-    species[key]=key==="name"||key==="phase"?input.value:key==="fit_D"?input.checked:+input.value;
+    species[key]=key==="name"||key==="phase"?input.value:+input.value;
+    markMechanismChanged();
     renderBuilderSpecies();
   }));
-  $$('[data-builder-remove-species]').forEach(button=>button.addEventListener("click",()=>{customMechanism.species.splice(+button.dataset.builderRemoveSpecies,1);renderBuilderSpecies();}));
+  $$('[data-builder-remove-species]').forEach(button=>button.addEventListener("click",()=>{customMechanism.species.splice(+button.dataset.builderRemoveSpecies,1);markMechanismChanged();renderBuilderSpecies();}));
 }
 
 function parameterRows(reaction,index) {
   if(reaction.type.startsWith("custom_")){
-    let parameters={};try{parameters=syncCustomParameters(reaction);}catch{}
+    try{syncCustomParameters(reaction);}catch{}
     return `<div class="custom-rate-grid">
     <label class="field"><span>Rate formula</span><input data-builder-reaction="${index}" data-builder-reaction-key="formula" value="${escapeHTML(reaction.formula||"")}" placeholder="k*Red/(Km + Red)"></label>
     <label class="field"><span>Parameters <b>name=value; …</b></span><input data-builder-reaction="${index}" data-builder-reaction-key="parameterText" value="${escapeHTML(reaction.parameterText||"")}" placeholder="k=1.0; Km=0.001"></label>
-  </div><div class="builder-parameter-head" aria-hidden="true"><span>Parameter</span><span>Value</span><span>Lower</span><span>Upper</span><span>Fit</span></div>`+
-    Object.entries(parameters).map(([name,p])=>`<div class="builder-parameter-row"><span><strong>${escapeHTML(name)}</strong><small>custom rate parameter</small></span><span>${Number(p.value).toPrecision(5)}</span><input aria-label="${name} lower bound" data-builder-param="${index}" data-builder-param-name="${name}" data-builder-param-key="lower" type="number" step="any" value="${p.lower}"><input aria-label="${name} upper bound" data-builder-param="${index}" data-builder-param-name="${name}" data-builder-param-key="upper" type="number" step="any" value="${p.upper}"><label class="fit-toggle"><input aria-label="Estimate ${name}" data-builder-param="${index}" data-builder-param-name="${name}" data-builder-param-key="fit" type="checkbox" ${p.fit?"checked":""}>Estimate</label></div>`).join("");
+  </div>`;
   }
   const blocking=reaction.type==="adsorption"?`<label class="field"><span>Blocking surface species <b>comma-separated; blank = product</b></span><input data-builder-reaction="${index}" data-builder-reaction-key="blockingText" value="${escapeHTML(reaction.blockingText||"")}" placeholder="Adsorbed, Inhibitor"></label>`:"";
-  return `<div class="builder-parameter-head" aria-hidden="true"><span>Parameter</span><span>Value</span><span>Lower</span><span>Upper</span><span>Availability</span></div>`+
-    Object.entries(reaction.parameters).map(([name,p])=>`<div class="builder-parameter-row"><span><strong>${escapeHTML(name)}</strong><small>${escapeHTML(reactionParameterMeta[reaction.type]?.[name]?.[5]||"")}</small></span><input aria-label="${name} value" data-builder-param="${index}" data-builder-param-name="${name}" data-builder-param-key="value" type="number" step="any" value="${p.value}"><input aria-label="${name} lower bound" data-builder-param="${index}" data-builder-param-name="${name}" data-builder-param-key="lower" type="number" step="any" value="${p.lower}"><input aria-label="${name} upper bound" data-builder-param="${index}" data-builder-param-name="${name}" data-builder-param-key="upper" type="number" step="any" value="${p.upper}"><label class="fit-toggle"><input aria-label="Estimate ${name}" data-builder-param="${index}" data-builder-param-name="${name}" data-builder-param-key="fit" type="checkbox" ${p.fit?"checked":""} ${name==="n"?"disabled":""}>${name==="n"?"Fixed integer":"Estimate"}</label></div>`).join("")+blocking;
+  return `<div class="builder-parameter-head" aria-hidden="true"><span>Parameter</span><span>Simulation value</span></div>`+
+    Object.entries(reaction.parameters).map(([name,p])=>`<div class="builder-parameter-row"><span><strong>${escapeHTML(name)}</strong><small>${escapeHTML(reactionParameterMeta[reaction.type]?.[name]?.[5]||"")}</small></span><input aria-label="${name} simulation value" data-builder-param="${index}" data-builder-param-name="${name}" data-builder-param-key="value" type="number" step="any" value="${p.value}"></div>`).join("")+blocking;
 }
 
 function renderBuilderReactions() {
@@ -180,11 +202,11 @@ function renderBuilderReactions() {
     <div class="builder-equation"><label class="field"><span>Reactants</span><input data-builder-reaction="${i}" data-builder-reaction-key="reactantsText" value="${escapeHTML(r.reactantsText)}" placeholder="A + 2 B"></label><span class="reaction-arrow">→</span><label class="field"><span>Products</span><input data-builder-reaction="${i}" data-builder-reaction-key="productsText" value="${escapeHTML(r.productsText)}" placeholder="C"></label></div>
     <div class="builder-parameters">${parameterRows(r,i)}</div>
   </article>`).join("");
-  $$('[data-builder-reaction-key]').forEach(input=>input.addEventListener("input",()=>customMechanism.reactions[+input.dataset.builderReaction][input.dataset.builderReactionKey]=input.value));
-  $$('[data-builder-reaction-type]').forEach(select=>select.addEventListener("change",()=>{const r=customMechanism.reactions[+select.dataset.builderReactionType];r.type=select.value;r.formula=select.value.startsWith("custom_")?"k*"+(customMechanism.species[0]?.name||"A"):"";r.parameterText=select.value.startsWith("custom_")?"k=1":"";r.parameters=select.value.startsWith("custom_")?inferCustomParameters(r.parameterText):parametersForType(select.value);renderBuilderReactions();}));
-  $$('[data-builder-param]').forEach(input=>input.addEventListener("change",()=>{const p=customMechanism.reactions[+input.dataset.builderParam].parameters[input.dataset.builderParamName],key=input.dataset.builderParamKey;p[key]=key==="fit"?input.checked:+input.value;}));
-  $$('[data-builder-reaction-key="parameterText"]').forEach(input=>input.addEventListener("change",()=>{const reaction=customMechanism.reactions[+input.dataset.builderReaction];syncCustomParameters(reaction);renderBuilderReactions();}));
-  $$('[data-builder-remove-reaction]').forEach(button=>button.addEventListener("click",()=>{customMechanism.reactions.splice(+button.dataset.builderRemoveReaction,1);renderBuilderReactions();}));
+  $$('[data-builder-reaction-key]').forEach(input=>input.addEventListener("input",()=>{customMechanism.reactions[+input.dataset.builderReaction][input.dataset.builderReactionKey]=input.value;markMechanismChanged();}));
+  $$('[data-builder-reaction-type]').forEach(select=>select.addEventListener("change",()=>{const r=customMechanism.reactions[+select.dataset.builderReactionType];r.type=select.value;r.formula=select.value.startsWith("custom_")?"k*"+(customMechanism.species[0]?.name||"A"):"";r.parameterText=select.value.startsWith("custom_")?"k=1":"";r.parameters=select.value.startsWith("custom_")?inferCustomParameters(r.parameterText):parametersForType(select.value);markMechanismChanged();renderBuilderReactions();}));
+  $$('[data-builder-param]').forEach(input=>input.addEventListener("change",()=>{const p=customMechanism.reactions[+input.dataset.builderParam].parameters[input.dataset.builderParamName];p[input.dataset.builderParamKey]=+input.value;markMechanismChanged();}));
+  $$('[data-builder-reaction-key="parameterText"]').forEach(input=>input.addEventListener("change",()=>{const reaction=customMechanism.reactions[+input.dataset.builderReaction];syncCustomParameters(reaction);markMechanismChanged();renderBuilderReactions();}));
+  $$('[data-builder-remove-reaction]').forEach(button=>button.addEventListener("click",()=>{customMechanism.reactions.splice(+button.dataset.builderRemoveReaction,1);markMechanismChanged();renderBuilderReactions();}));
 }
 
 function renderCustomMechanism() {
@@ -194,25 +216,35 @@ function renderCustomMechanism() {
 
 function customFitParameterEntries() {
   const model=serializeCustomModel(),entries=[];
-  model.species.forEach((species,index)=>{if(species.phase==="solution")entries.push({id:`s${index+1}_D`,label:`${species.name} diffusion coefficient`,value:species.D,unit:"cm² s⁻¹",fit:species.fit_D});});
+  model.species.forEach((species,index)=>{if(species.phase==="solution")entries.push({id:`s${index+1}_D`,label:`${species.name} diffusion coefficient`,value:species.D,unit:"cm² s⁻¹",fit:species.fit_D,lower:species.D_lower,upper:species.D_upper,transform:"log",advanced:true});});
   model.reactions.forEach((reaction,index)=>Object.entries(reaction.parameters).forEach(([name,parameter])=>{
     if(["solution_electron","surface_electron"].includes(reaction.type)&&name==="n")return;
-    entries.push({id:`r${index+1}_${name}`,label:`${reaction.label||`Reaction ${index+1}`} · ${name}`,value:parameter.value,unit:"model units",fit:Boolean(parameter.fit)});
+    const meta=reactionParameterMeta[reaction.type]?.[name];
+    entries.push({id:`r${index+1}_${name}`,label:`${reaction.label||`Reaction ${index+1}`} · ${name}`,value:parameter.value,unit:meta?.[5]||"model units",fit:Boolean(parameter.fit),lower:Number(parameter.lower??meta?.[2]??-1e12),upper:Number(parameter.upper??meta?.[3]??1e12),transform:parameter.transform||meta?.[4]||"identity",advanced:false});
   }));
   return entries;
 }
 
-function setCustomFitSelection(id,fit) {
+function applyCustomFitParameter(model,id,settings) {
   const match=String(id).match(/^([sr])(\d+)_(.+)$/);if(!match)return;
   const index=Number(match[2])-1;
-  if(match[1]==="s")customMechanism.species[index].fit_D=fit;
-  else if(customMechanism.reactions[index]?.parameters?.[match[3]])customMechanism.reactions[index].parameters[match[3]].fit=fit;
+  if(match[1]==="s"){
+    const species=model.species[index];if(!species)return;
+    species.fit_D=Boolean(settings.fit);species.D=Number(settings.value);
+    species.D_lower=Number(settings.lower);species.D_upper=Number(settings.upper);
+  }else{
+    const parameter=model.reactions[index]?.parameters?.[match[3]];if(!parameter)return;
+    parameter.fit=Boolean(settings.fit);parameter.value=Number(settings.value);
+    parameter.lower=Number(settings.lower);parameter.upper=Number(settings.upper);
+    parameter.transform=settings.transform;
+  }
 }
 function setBuilderError(message=""){const box=$("#builder-error");box.textContent=message;box.hidden=!message;}
 
 function renderBuilderSummary(result) {
   $("#builder-summary").className="builder-summary validated-summary";
-  $("#builder-summary").innerHTML=`<div class="result-badges"><span class="result-badge success">Valid mechanism</span><span class="result-badge">${result.species_count} species</span><span class="result-badge">${result.reaction_count} reactions</span><span class="result-badge">Rust/Wasm simulation ready</span>${result.fitted_parameters.length?`<span class="result-badge">${result.fitted_parameters.length} selected for fitting</span>`:""}</div>${result.warning?`<div class="model-warning">${escapeHTML(result.warning)}</div>`:""}<div class="equation-list">${result.equations.map(e=>`<div><span class="candidate-kind">${escapeHTML(e.type.replaceAll("_"," "))}</span><strong>${escapeHTML(e.equation)}</strong><small>${escapeHTML(e.label)}</small></div>`).join("")}</div>`;
+  $("#builder-summary").innerHTML=`<div class="result-badges"><span class="result-badge success">Valid reaction setup</span><span class="result-badge">${result.species_count} species</span><span class="result-badge">${result.reaction_count} reactions</span><span class="result-badge">Rust/Wasm simulation ready</span></div>${result.warning?`<div class="model-warning">${escapeHTML(result.warning)}</div>`:""}<div class="equation-list">${result.equations.map(e=>`<div><span class="candidate-kind">${escapeHTML(e.type.replaceAll("_"," "))}</span><strong>${escapeHTML(e.equation)}</strong><small>${escapeHTML(e.label)}</small></div>`).join("")}</div>`;
+  $("#mechanism-equation").textContent=result.equations.map(e=>e.equation).join("  ·  ");
 }
 
 async function validateBuilder(model=serializeCustomModel()) {
@@ -221,22 +253,13 @@ async function validateBuilder(model=serializeCustomModel()) {
   catch(error){setBuilderError(error.message);throw error;}
 }
 
-async function simulateBuilder() {
-  const button=$("#builder-simulate");button.disabled=true;button.textContent="Simulating…";setBuilderError();
-  try{const model=serializeCustomModel();await validateBuilder(model);const payload=payloadFromForm();payload.preset="custom";payload.custom_model=model;if($("#builder-transport").value==="pnp"){payload.solver="pnp";payload.pnp_stern_capacitance=Number($("#builder-pnp-stern").value);payload.pnp_pzc=Number($("#builder-pnp-pzc").value);payload.pnp_relative_permittivity=Number($("#builder-pnp-permittivity").value);}if(!window.electrochemBrowserEngine?.supportsCustomSimulation(payload))throw new Error("Choose transport physics compatible with the mechanism. PNP currently accepts solution species and homogeneous or solution electron-transfer steps.");const result=await window.electrochemBrowserEngine.simulateCustom(payload);displayResult(result,payload);$("#interpretation-text").textContent=payload.solver==="pnp"?"This trace solves migration, diffusion, diffuse charge, the Stern layer, and Frumkin electron transfer together in Rust/WebAssembly.":"This trace was generated from the mechanism-builder species, reactions, and rate laws.";switchView("simulate");}
-  catch(error){setBuilderError(error.message);}finally{button.disabled=false;button.textContent="Simulate mechanism";}
-}
-
 function exportBuilder(){try{const blob=new Blob([JSON.stringify(serializeCustomModel(),null,2)],{type:"application/json"});const link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download=`${(customMechanism.name||"mechanism").replace(/[^A-Za-z0-9_-]+/g,"_")}.json`;link.click();URL.revokeObjectURL(link.href);}catch(error){setBuilderError(error.message);}}
 
-$("#builder-add-species").addEventListener("click",()=>{customMechanism.species.push({name:`Species_${customMechanism.species.length+1}`,phase:"solution",charge:0,initial:0,D:1e-5,fit_D:false,D_lower:1e-9,D_upper:1e-3});renderBuilderSpecies();});
-$("#builder-add-reaction").addEventListener("click",()=>{customMechanism.reactions.push({label:`Reaction ${customMechanism.reactions.length+1}`,type:"bulk_mass_action",reactantsText:"",productsText:"",parameters:parametersForType("bulk_mass_action"),formula:"",parameterText:""});renderBuilderReactions();});
+$("#builder-add-species").addEventListener("click",()=>{customMechanism.species.push({name:`Species_${customMechanism.species.length+1}`,phase:"solution",charge:0,initial:0,D:1e-5,fit_D:false,D_lower:1e-9,D_upper:1e-3});markMechanismChanged();renderBuilderSpecies();});
+$("#builder-add-reaction").addEventListener("click",()=>{customMechanism.reactions.push({label:`Reaction ${customMechanism.reactions.length+1}`,type:"bulk_mass_action",reactantsText:"",productsText:"",parameters:parametersForType("bulk_mass_action"),formula:"",parameterText:""});markMechanismChanged();renderBuilderReactions();});
 $("#builder-validate").addEventListener("click",()=>validateBuilder().catch(()=>{}));
-$("#builder-simulate").addEventListener("click",simulateBuilder);
-$("#builder-example").addEventListener("click",()=>{customMechanism=defaultCustomMechanism();renderCustomMechanism();setBuilderError();$("#builder-summary").className="empty-state builder-summary";$("#builder-summary").textContent="Validate the mechanism to review its equations and browser compatibility.";});
-$("#builder-pnp-example").addEventListener("click",()=>{customMechanism=defaultPnpMechanism();renderCustomMechanism();$("#builder-transport").value="pnp";$("#builder-pnp-settings").hidden=false;$("#builder-pnp-note").hidden=false;setBuilderError();$("#builder-summary").className="empty-state builder-summary";$("#builder-summary").textContent="The PNP example is electroneutral and ready for fully coupled transport simulation.";});
 $("#builder-export-button").addEventListener("click",exportBuilder);
 $("#builder-import-button").addEventListener("click",()=>$("#builder-import-file").click());
-$("#builder-import-file").addEventListener("change",async event=>{try{hydrateCustomModel(JSON.parse(await event.target.files[0].text()));await validateBuilder();}catch(error){setBuilderError(error.message);}finally{event.target.value="";}});
-$("#builder-transport").addEventListener("change",event=>{const pnp=event.target.value==="pnp";$("#builder-pnp-settings").hidden=!pnp;$("#builder-pnp-note").hidden=!pnp;});
-renderCustomMechanism();
+$("#builder-import-file").addEventListener("change",async event=>{try{hydrateCustomModel(JSON.parse(await event.target.files[0].text()));markMechanismChanged();await validateBuilder();}catch(error){setBuilderError(error.message);}finally{event.target.value="";}});
+$("#builder-transport").addEventListener("change",event=>{setBuilderTransport(event.target.value);markMechanismChanged();});
+selectPreset(currentPreset);
