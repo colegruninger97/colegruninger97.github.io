@@ -25,7 +25,6 @@ self.addEventListener("message", async event => {
     const started = performance.now();
     let result;
     if (type === "simulate_solution_e") result = module.simulate_solution_e(payload);
-    else if (type === "simulate_electrografting") result = module.simulate_electrografting(payload);
     else if (type === "analyze_catalytic_rate") result = module.analyze_catalytic_rate(payload);
     else if (type === "simulate_pnp") result = module.simulate_pnp(payload);
     else if (type === "inspect_data_quality") result = module.inspect_data_quality(payload);

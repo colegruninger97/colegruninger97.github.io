@@ -44,10 +44,6 @@
       return this.request("health");
     }
 
-    simulateElectrografting(payload) {
-      return this.request("simulate_electrografting", payload);
-    }
-
     analyzeCatalyticRate(payload) {
       return this.request("analyze_catalytic_rate", payload);
     }
@@ -117,6 +113,26 @@
       });
 
       switch (payload?.preset) {
+        case "solution_ecprime":
+          return {
+            name: "Solution EC-prime mechanism",
+            species: [
+              species("Ox", payload.bulk_concentration),
+              species("Red"),
+              species("Substrate", payload.substrate_concentration),
+              species("Product")
+            ],
+            reactions: [
+              electronTransfer(
+                "Electron transfer", "Ox", "Red",
+                payload.formal_potential, payload.electron_transfer_rate
+              ),
+              massAction(
+                "Catalytic regeneration",
+                ["Red", "Substrate"], ["Ox", "Product"], payload.catalytic_rate
+              )
+            ]
+          };
         case "solution_ec":
           return {
             name: "Solution EC mechanism",
@@ -199,7 +215,6 @@
     }
 
     supportsSimulation(payload) {
-      if (payload?.preset === "electrografting") return true;
       if (!supportedIntegrators.includes(payload?.solver)) return false;
       if (payload?.preset === "solution_e") return true;
       return this.presetModel(payload) !== null;
@@ -210,37 +225,6 @@
         return Promise.reject(new Error(
           "Choose BE/FE, TRAP/AB2, BDF1, or BDF2 for a solution mechanism."
         ));
-      }
-      if (payload.preset === "electrografting") {
-        const duration=Math.abs(payload.switching_potential-payload.start_potential)/payload.scan_rate;
-        const halfSteps=Math.max(1,Math.ceil(duration/payload.timestep));
-        const stepDt=duration/halfSteps,time=[0],potential=[payload.start_potential];
-        for(let step=1;step<=halfSteps;step++){
-          time.push(time.at(-1)+stepDt);
-          potential.push(payload.start_potential+(payload.switching_potential-payload.start_potential)*step/halfSteps);
-        }
-        for(let step=1;step<=halfSteps;step++){
-          time.push(time.at(-1)+stepDt);
-          potential.push(payload.switching_potential+(payload.start_potential-payload.switching_potential)*step/halfSteps);
-        }
-        const parameters={temperature:payload.temperature,electrode_area:payload.electrode_area,
-          diazonium_concentration:payload.diazonium_concentration,
-          diazonium_diffusion_coefficient:payload.diazonium_diffusion_coefficient,
-          diazonium_formal_potential:payload.diazonium_formal_potential,
-          diazonium_electron_transfer_rate:payload.diazonium_electron_transfer_rate,
-          diazonium_transfer_coefficient:payload.diazonium_transfer_coefficient,
-          double_layer_capacitance_microfarads:payload.double_layer_capacitance,
-          maximum_coverage:payload.maximum_coverage,passivation_coefficient:payload.passivation_coefficient,
-          aryl_grafting_rate:payload.aryl_grafting_rate,radical_reduction_rate:payload.radical_reduction_rate,
-          hydrogen_exchange_current_density:payload.hydrogen_exchange_current_density};
-        return this.simulateElectrografting({time,potential,parameters,competition:"both"}).then(result=>{
-          const peakIndex=result.current.reduce((best,value,index)=>Math.abs(value)>Math.abs(result.current[best])?index:best,0);
-          return {...result,preset:"electrografting",interfacial_potential:result.potential,points:result.current.length,
-            series:[{name:"Total current",current:result.current},{name:"Diazonium",current:result.diazonium_current},
-              {name:"Radical reduction",current:result.radical_reduction_current},{name:"Hydrogen",current:result.hydrogen_current},
-              {name:"Capacitive",current:result.capacitive_current}],
-            summary:{peak_current:result.current[peakIndex],peak_potential:result.potential[peakIndex],maximum_absolute_current:Math.abs(result.current[peakIndex])}};
-        });
       }
       if (payload.preset === "solution_e") {
         return this.request("simulate_solution_e", payload);
