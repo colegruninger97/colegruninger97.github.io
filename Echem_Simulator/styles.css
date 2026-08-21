@@ -278,17 +278,20 @@ main { width: min(1380px, 100%); margin: 0 auto; padding: 27px clamp(22px,3vw,48
 .builder-species-head { padding: 0 10px 7px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .builder-species { display: grid; gap: 7px; }
 .builder-species-row { padding: 9px; background: #f6f8f7; border: 1px solid #edf1ef; border-radius: 8px; }
-.builder-species-row > input, .builder-species-row > select, .builder-reaction-title input, .builder-reaction-title select,
+.builder-species-row > input, .builder-species-row > select, .builder-reaction-title input, .reaction-type-field select,
 .builder-equation input, .builder-parameter-row input { width: 100%; height: 36px; padding: 0 9px; color: var(--ink); background: white; border: 1px solid #cbd6d3; border-radius: 6px; font-size: 11px; }
 .builder-species-row input:focus, .builder-species-row select:focus, .builder-reaction-card input:focus, .builder-reaction-card select:focus { border-color: var(--teal); outline: 0; box-shadow: 0 0 0 3px rgba(8,127,121,.1); }
 .fit-toggle { display: flex; align-items: center; justify-content: center; gap: 5px; color: var(--muted); font-size: 10px; cursor: pointer; }
 .fit-toggle input { accent-color: var(--teal); }
 .builder-reactions { display: grid; gap: 13px; }
 .builder-reaction-card { padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfb; }
-.builder-reaction-title { display: grid; grid-template-columns: minmax(150px,.7fr) minmax(220px,1.15fr) 34px; gap: 9px; }
+.builder-reaction-title { display: grid; grid-template-columns: 1fr 34px; gap: 9px; }
 .builder-reaction-title input { font-weight: 750; }
 .builder-equation { display: grid; grid-template-columns: 1fr 34px 1fr; gap: 9px; align-items: end; margin-top: 12px; padding: 12px; background: #eef3f6; border-radius: 8px; }
 .reaction-arrow { display: grid; place-items: center; height: 36px; color: var(--copper); font: 22px Georgia,serif; }
+.reaction-type-field { margin-top: 11px; }
+.reaction-type-guidance { margin: 9px 3px 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.reaction-parameter-prompt { margin: 0; padding: 9px 11px; background: var(--carolina-soft); border-radius: 7px; }
 .builder-parameters { margin-top: 12px; }
 .builder-parameter-head, .builder-parameter-row { display: grid; grid-template-columns: minmax(180px,1.2fr) minmax(130px,.8fr); gap: 8px; align-items: center; }
 .builder-parameter-head { padding: 0 7px 5px; color: var(--muted); font-size: 8px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }

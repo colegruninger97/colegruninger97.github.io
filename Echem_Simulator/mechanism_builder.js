@@ -4,6 +4,7 @@ const reactionTypeLabels = {
   custom_bulk_rate: "Custom homogeneous rate law",
   surface_electron: "Surface-confined electron transfer",
   adsorption: "Adsorption / desorption",
+  electroadsorption: "Electron-transfer adsorption (solution → surface)",
   surface_mass_action: "Heterogeneous mass action",
   custom_surface_rate: "Custom heterogeneous rate law"
 };
@@ -26,6 +27,13 @@ const reactionParameterMeta = {
     k_ads:[0.001,true,1e-12,1e6,"log","adsorption rate (cm s⁻¹)"],
     k_des:[1,true,1e-12,1e12,"log","desorption rate (s⁻¹)"],
     Gamma_max:[1e-10,false,0,1e-6,"identity","maximum coverage (mol cm⁻²; 0 = Henry)"]
+  },
+  electroadsorption: {
+    E0:[0,true,-2,2,"identity","conditional formal potential (V)"],
+    k0:[1e-10,true,1e-20,1e-4,"log","standard exchange flux (mol cm⁻² s⁻¹)"],
+    alpha:[0.5,false,0.001,0.999,"logit","transfer coefficient"],
+    n:[1,false,0.5,12.5,"identity","electron count"],
+    Gamma_max:[1e-10,false,1e-20,1e-6,"log","maximum surface coverage (mol cm⁻²)"]
   },
   surface_mass_action: {k:[1,true,1e-12,1e20,"log","heterogeneous rate constant"]}
 };
@@ -90,6 +98,51 @@ function parseReactionSide(text) {
   return [...totals].map(([species,stoich])=>({species,stoich}));
 }
 
+function reactionEditorReadiness() {
+  const names=customMechanism.species.map(species=>String(species.name||"").trim());
+  if(names.length<2)return "Add at least two species and assign each one a phase before defining reactions.";
+  if(names.some(name=>!name.match(/^[A-Za-z_][A-Za-z0-9_]*$/)))return "Give every species a valid, nonblank name before defining reactions.";
+  if(new Set(names).size!==names.length)return "Species names must be unique before defining reactions.";
+  if(customMechanism.species.some(species=>!["solution","surface"].includes(species.phase)))return "Choose solution or surface for every species before defining reactions.";
+  return "";
+}
+
+function reactionTypeState(reaction) {
+  let reactants,products;
+  try{
+    reactants=parseReactionSide(reaction.reactantsText);
+    products=parseReactionSide(reaction.productsText);
+  }catch(error){return {types:[],guidance:error.message};}
+  const participants=[...reactants,...products];
+  if(!participants.length)return {types:[],guidance:"Enter the reactant and product species first; compatible reaction types will then appear."};
+  const phaseOf=name=>customMechanism.species.find(species=>species.name===name)?.phase||"solution";
+  const phases=participants.map(participant=>phaseOf(participant.species));
+  const unitPair=reactants.length===1&&products.length===1&&reactants[0].stoich===1&&products[0].stoich===1;
+  const allSolution=phases.every(phase=>phase==="solution");
+  const allSurface=phases.every(phase=>phase==="surface");
+  if(allSolution){
+    const types=["bulk_mass_action","custom_bulk_rate"];
+    if(unitPair)types.unshift("solution_electron");
+    return {types,guidance:unitPair?"All participants are in solution. Choose electron transfer for a redox pair, or homogeneous kinetics for a chemical step.":"All participants are in solution, so only homogeneous chemistry is available for this stoichiometry."};
+  }
+  if(allSurface){
+    const types=["surface_mass_action","custom_surface_rate"];
+    if(unitPair)types.unshift("surface_electron");
+    return {types,guidance:unitPair?"All participants are surface-bound. Choose surface electron transfer for a redox pair, or heterogeneous kinetics for a chemical step.":"All participants are surface-bound, so only heterogeneous surface chemistry is available for this stoichiometry."};
+  }
+  const solutionToSurface=unitPair&&phaseOf(reactants[0].species)==="solution"&&phaseOf(products[0].species)==="surface";
+  if(solutionToSurface)return {types:["electroadsorption","adsorption","surface_mass_action","custom_surface_rate"],guidance:"This is a solution → surface pair. Choose electron-transfer adsorption when reduction and binding occur together; choose adsorption / desorption only when no electron is transferred."};
+  const surfaceToSolution=unitPair&&phaseOf(reactants[0].species)==="surface"&&phaseOf(products[0].species)==="solution";
+  if(surfaceToSolution)return {types:["surface_mass_action","custom_surface_rate"],guidance:"For a reversible adsorption or electron-transfer adsorption step, write the equation in the solution → surface direction. The reverse process is included by its desorption or oxidation rate."};
+  return {types:["surface_mass_action","custom_surface_rate"],guidance:"This step crosses phases or includes a surface participant, so only heterogeneous kinetics are available."};
+}
+
+function prepareReactionType(reaction) {
+  const state=reactionTypeState(reaction);
+  const compatible=!reaction.type||state.types.includes(reaction.type);
+  return {...state,compatible,guidance:compatible?state.guidance:`${reactionTypeLabels[reaction.type]||"The selected reaction type"} is not compatible with these participant phases. ${state.guidance}`};
+}
+
 function inferCustomParameters(text) {
   const output={};
   for(const entry of String(text||"").split(/[;,]/).map(x=>x.trim()).filter(Boolean)){
@@ -118,13 +171,21 @@ function syncCustomParameters(reaction) {
 }
 
 function serializeCustomModel() {
-  const species=customMechanism.species.map(s=>({name:String(s.name).trim(),phase:s.phase||"solution",charge:Math.trunc(Number(s.charge||0)),initial:+s.initial,D:s.phase==="surface"?0:+s.D,
-    fit_D:s.phase==="solution"&&Boolean(s.fit_D),D_lower:+(s.D_lower||1e-9),D_upper:+(s.D_upper||1e-3)}));
-  const reactions=customMechanism.reactions.map(r=>({label:r.label||"Reaction",type:r.type,
-    reactants:parseReactionSide(r.reactantsText),products:parseReactionSide(r.productsText),
-    parameters:r.type.startsWith("custom_")?structuredClone(syncCustomParameters(r)):structuredClone(r.parameters),
-    formula:r.type.startsWith("custom_")?String(r.formula||"").trim():"",
-    blocking_species:r.type==="adsorption"?String(r.blockingText||"").split(",").map(name=>name.trim()).filter(Boolean):[]}));
+  const species=customMechanism.species.map((s,index)=>{
+    if(!["solution","surface"].includes(s.phase))throw new Error(`Species ${index+1}: choose whether it is in solution or surface-bound.`);
+    return {name:String(s.name).trim(),phase:s.phase,charge:Math.trunc(Number(s.charge||0)),initial:+s.initial,D:s.phase==="surface"?0:+s.D,
+      fit_D:s.phase==="solution"&&Boolean(s.fit_D),D_lower:+(s.D_lower||1e-9),D_upper:+(s.D_upper||1e-3)};
+  });
+  const reactions=customMechanism.reactions.map((r,index)=>{
+    if(!r.type)throw new Error(`Reaction ${index+1}: enter reactants and products, then choose one of the compatible reaction types.`);
+    if(!reactionTypeState(r).types.includes(r.type))throw new Error(`Reaction ${index+1}: ${reactionTypeLabels[r.type]||r.type} is not compatible with the selected participant phases.`);
+    const custom=r.type.startsWith("custom_");
+    return {label:r.label||"Reaction",type:r.type,
+      reactants:parseReactionSide(r.reactantsText),products:parseReactionSide(r.productsText),
+      parameters:custom?structuredClone(syncCustomParameters(r)):structuredClone(r.parameters),
+      formula:custom?String(r.formula||"").trim():"",
+      blocking_species:["adsorption","electroadsorption"].includes(r.type)?String(r.blockingText||"").split(",").map(name=>name.trim()).filter(Boolean):[]};
+  });
   return {name:customMechanism.name||"Custom mechanism",species,reactions};
 }
 
@@ -161,6 +222,7 @@ function markMechanismChanged() {
 const pnpReactionTypes=new Set(["bulk_mass_action","solution_electron","custom_bulk_rate"]);
 
 function pnpCompatibilityIssue() {
+  if(customMechanism.species.some(species=>!["solution","surface"].includes(species.phase)))return "Choose a phase for every species before selecting PNP.";
   if(customMechanism.species.some(species=>species.phase==="surface"))return "PNP is unavailable while the setup contains surface species.";
   if(customMechanism.reactions.some(reaction=>!pnpReactionTypes.has(reaction.type)))return "PNP is unavailable while the setup contains surface-only reactions.";
   return "";
@@ -199,10 +261,10 @@ function setBuilderTransport(transport) {
 function renderBuilderSpecies() {
   $("#builder-species").innerHTML=customMechanism.species.map((s,i)=>`<div class="builder-species-row">
     <input aria-label="Species name" data-builder-species="${i}" data-builder-species-key="name" value="${escapeHTML(s.name)}">
-    <select aria-label="Species phase" data-builder-species="${i}" data-builder-species-key="phase"><option value="solution" ${s.phase!=="surface"?"selected":""}>solution</option><option value="surface" ${s.phase==="surface"?"selected":""}>surface</option></select>
-    <input aria-label="Species charge" data-builder-species="${i}" data-builder-species-key="charge" type="number" step="1" value="${Number(s.charge||0)}" ${s.phase==="surface"?"disabled title=\"PNP charge applies to mobile species\"":""}>
+    <select aria-label="Species phase" data-builder-species="${i}" data-builder-species-key="phase"><option value="" ${!["solution","surface"].includes(s.phase)?"selected":""}>choose phase…</option><option value="solution" ${s.phase==="solution"?"selected":""}>solution</option><option value="surface" ${s.phase==="surface"?"selected":""}>surface</option></select>
+    <input aria-label="Species charge" data-builder-species="${i}" data-builder-species-key="charge" type="number" step="1" value="${Number(s.charge||0)}" ${s.phase!=="solution"?`disabled title="${s.phase==="surface"?"PNP charge applies to mobile species":"Choose a phase first"}"`:""}>
     <input aria-label="Initial amount" data-builder-species="${i}" data-builder-species-key="initial" type="number" value="${s.initial}" step="any">
-    <input aria-label="Diffusion coefficient" data-builder-species="${i}" data-builder-species-key="D" type="number" value="${s.D}" step="any" ${s.phase==="surface"?"disabled title=\"Surface coverage does not diffuse\"":""}>
+    <input aria-label="Diffusion coefficient" data-builder-species="${i}" data-builder-species-key="D" type="number" value="${s.D}" step="any" ${s.phase!=="solution"?`disabled title="${s.phase==="surface"?"Surface coverage does not diffuse":"Choose a phase first"}"`:""}>
     <button class="remove-dataset" data-builder-remove-species="${i}" type="button" aria-label="Remove ${escapeHTML(s.name)}">×</button>
   </div>`).join("");
   $$('[data-builder-species-key]').forEach(input=>input.addEventListener("change",()=>{
@@ -210,12 +272,14 @@ function renderBuilderSpecies() {
     species[key]=key==="name"||key==="phase"?input.value:+input.value;
     markMechanismChanged();
     renderBuilderSpecies();
+    if(key==="name"||key==="phase")renderBuilderReactions();
   }));
-  $$('[data-builder-remove-species]').forEach(button=>button.addEventListener("click",()=>{customMechanism.species.splice(+button.dataset.builderRemoveSpecies,1);markMechanismChanged();renderBuilderSpecies();}));
+  $$('[data-builder-remove-species]').forEach(button=>button.addEventListener("click",()=>{customMechanism.species.splice(+button.dataset.builderRemoveSpecies,1);markMechanismChanged();renderBuilderSpecies();renderBuilderReactions();}));
   syncTransportControls();
 }
 
 function parameterRows(reaction,index) {
+  if(!reaction.type)return `<p class="helper-text reaction-parameter-prompt">Choose a compatible reaction type to enter its kinetic parameters.</p>`;
   if(reaction.type.startsWith("custom_")){
     try{syncCustomParameters(reaction);}catch{}
     return `<div class="custom-rate-grid">
@@ -223,18 +287,34 @@ function parameterRows(reaction,index) {
     <label class="field"><span>Parameters <b>name=value; …</b></span><input data-builder-reaction="${index}" data-builder-reaction-key="parameterText" value="${escapeHTML(reaction.parameterText||"")}" placeholder="k=1.0; Km=0.001"></label>
   </div>`;
   }
-  const blocking=reaction.type==="adsorption"?`<label class="field"><span>Blocking surface species <b>comma-separated; blank = product</b></span><input data-builder-reaction="${index}" data-builder-reaction-key="blockingText" value="${escapeHTML(reaction.blockingText||"")}" placeholder="Adsorbed, Inhibitor"></label>`:"";
+  const blocking=["adsorption","electroadsorption"].includes(reaction.type)?`<label class="field"><span>Blocking surface species <b>comma-separated; blank = product</b></span><input data-builder-reaction="${index}" data-builder-reaction-key="blockingText" value="${escapeHTML(reaction.blockingText||"")}" placeholder="Adsorbed, Inhibitor"></label>`:"";
   return `<div class="builder-parameter-head" aria-hidden="true"><span>Parameter</span><span>Simulation value</span></div>`+
     Object.entries(reaction.parameters).map(([name,p])=>`<div class="builder-parameter-row"><span><strong>${escapeHTML(name)}</strong><small>${escapeHTML(reactionParameterMeta[reaction.type]?.[name]?.[5]||"")}</small></span><input aria-label="${name} simulation value" data-builder-param="${index}" data-builder-param-name="${name}" data-builder-param-key="value" type="number" step="any" value="${p.value}"></div>`).join("")+blocking;
 }
 
 function renderBuilderReactions() {
-  $("#builder-reactions").innerHTML=customMechanism.reactions.map((r,i)=>`<article class="builder-reaction-card">
-    <div class="builder-reaction-title"><input aria-label="Reaction label" data-builder-reaction="${i}" data-builder-reaction-key="label" value="${escapeHTML(r.label)}"><select aria-label="Reaction type" data-builder-reaction-type="${i}">${Object.entries(reactionTypeLabels).map(([value,label])=>`<option value="${value}" ${r.type===value?"selected":""}>${label}</option>`).join("")}</select><button class="remove-dataset" data-builder-remove-reaction="${i}" type="button" aria-label="Remove reaction">×</button></div>
+  const readiness=reactionEditorReadiness();
+  const availability=$("#builder-reaction-availability");
+  availability.textContent=readiness;
+  availability.hidden=!readiness;
+  $("#builder-reactions").hidden=Boolean(readiness);
+  $("#builder-add-reaction").hidden=Boolean(readiness);
+  $("#rate-language-help").hidden=Boolean(readiness);
+  if(readiness){$("#builder-reactions").innerHTML="";syncTransportControls();return;}
+  $("#builder-reactions").innerHTML=customMechanism.reactions.map((r,i)=>{
+    const state=prepareReactionType(r);
+    const placeholder=!state.compatible?"Choose a new compatible reaction type":state.types.length?"Choose a compatible reaction type":"Enter valid participants first";
+    const options=state.types.map(value=>`<option value="${value}" ${state.compatible&&r.type===value?"selected":""}>${reactionTypeLabels[value]}</option>`).join("");
+    const parameters=state.compatible?parameterRows(r,i):`<p class="helper-text reaction-parameter-prompt">Choose a compatible reaction type before editing kinetic parameters.</p>`;
+    return `<article class="builder-reaction-card">
+    <div class="builder-reaction-title"><input aria-label="Reaction label" data-builder-reaction="${i}" data-builder-reaction-key="label" value="${escapeHTML(r.label)}"><button class="remove-dataset" data-builder-remove-reaction="${i}" type="button" aria-label="Remove reaction">×</button></div>
     <div class="builder-equation"><label class="field"><span>Reactants</span><input data-builder-reaction="${i}" data-builder-reaction-key="reactantsText" value="${escapeHTML(r.reactantsText)}" placeholder="A + 2 B"></label><span class="reaction-arrow">→</span><label class="field"><span>Products</span><input data-builder-reaction="${i}" data-builder-reaction-key="productsText" value="${escapeHTML(r.productsText)}" placeholder="C"></label></div>
-    <div class="builder-parameters">${parameterRows(r,i)}</div>
-  </article>`).join("");
+    <label class="field reaction-type-field"><span>Compatible reaction type</span><select aria-label="Reaction type" aria-describedby="builder-reaction-guidance-${i}" data-builder-reaction-type="${i}" ${state.types.length?"":"disabled"}><option value="" ${state.compatible&&r.type?"":"selected"}>${placeholder}</option>${options}</select></label>
+    <p id="builder-reaction-guidance-${i}" class="reaction-type-guidance">${escapeHTML(state.guidance)}</p>
+    <div class="builder-parameters">${parameters}</div>
+  </article>`;}).join("");
   $$('[data-builder-reaction-key]').forEach(input=>input.addEventListener("input",()=>{customMechanism.reactions[+input.dataset.builderReaction][input.dataset.builderReactionKey]=input.value;markMechanismChanged();}));
+  $$('[data-builder-reaction-key="reactantsText"], [data-builder-reaction-key="productsText"]').forEach(input=>input.addEventListener("change",renderBuilderReactions));
   $$('[data-builder-reaction-type]').forEach(select=>select.addEventListener("change",()=>{const r=customMechanism.reactions[+select.dataset.builderReactionType];r.type=select.value;r.formula=select.value.startsWith("custom_")?"k*"+(customMechanism.species[0]?.name||"A"):"";r.parameterText=select.value.startsWith("custom_")?"k=1":"";r.parameters=select.value.startsWith("custom_")?inferCustomParameters(r.parameterText):parametersForType(select.value);markMechanismChanged();renderBuilderReactions();}));
   $$('[data-builder-param]').forEach(input=>input.addEventListener("change",()=>{const p=customMechanism.reactions[+input.dataset.builderParam].parameters[input.dataset.builderParamName];p[input.dataset.builderParamKey]=+input.value;markMechanismChanged();}));
   $$('[data-builder-reaction-key="parameterText"]').forEach(input=>input.addEventListener("change",()=>{const reaction=customMechanism.reactions[+input.dataset.builderReaction];syncCustomParameters(reaction);markMechanismChanged();renderBuilderReactions();}));
@@ -251,7 +331,7 @@ function customFitParameterEntries() {
   const model=serializeCustomModel(),entries=[];
   model.species.forEach((species,index)=>{if(species.phase==="solution")entries.push({id:`s${index+1}_D`,label:`${species.name} diffusion coefficient`,value:species.D,unit:"cm² s⁻¹",fit:species.fit_D,lower:species.D_lower,upper:species.D_upper,transform:"log",advanced:true});});
   model.reactions.forEach((reaction,index)=>Object.entries(reaction.parameters).forEach(([name,parameter])=>{
-    if(["solution_electron","surface_electron"].includes(reaction.type)&&name==="n")return;
+    if(["solution_electron","surface_electron","electroadsorption"].includes(reaction.type)&&name==="n")return;
     const meta=reactionParameterMeta[reaction.type]?.[name];
     entries.push({id:`r${index+1}_${name}`,label:`${reaction.label||`Reaction ${index+1}`} · ${name}`,value:parameter.value,unit:meta?.[5]||"model units",fit:Boolean(parameter.fit),lower:Number(parameter.lower??meta?.[2]??-1e12),upper:Number(parameter.upper??meta?.[3]??1e12),transform:parameter.transform||meta?.[4]||"identity",advanced:false});
   }));
@@ -282,14 +362,14 @@ function renderBuilderSummary(result) {
 
 async function validateBuilder(model=serializeCustomModel()) {
   setBuilderError();
-  try{if(!window.electrochemBrowserEngine?.supportsCustomMechanism(model))throw new Error("The browser supports solution and surface species with homogeneous, electron-transfer, adsorption, and heterogeneous rate laws.");const result=await window.electrochemBrowserEngine.validateCustom(model);renderBuilderSummary(result);return result;}
+  try{if(!window.electrochemBrowserEngine?.supportsCustomMechanism(model))throw new Error("The browser supports solution and surface species with homogeneous, electron-transfer, adsorption, electron-transfer adsorption, and heterogeneous rate laws.");const result=await window.electrochemBrowserEngine.validateCustom(model);renderBuilderSummary(result);return result;}
   catch(error){setBuilderError(error.message);throw error;}
 }
 
 function exportBuilder(){try{const blob=new Blob([JSON.stringify(serializeCustomModel(),null,2)],{type:"application/json"});const link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download=`${(customMechanism.name||"mechanism").replace(/[^A-Za-z0-9_-]+/g,"_")}.json`;link.click();URL.revokeObjectURL(link.href);}catch(error){setBuilderError(error.message);}}
 
-$("#builder-add-species").addEventListener("click",()=>{customMechanism.species.push({name:`Species_${customMechanism.species.length+1}`,phase:"solution",charge:0,initial:0,D:1e-5,fit_D:false,D_lower:1e-9,D_upper:1e-3});markMechanismChanged();renderBuilderSpecies();});
-$("#builder-add-reaction").addEventListener("click",()=>{customMechanism.reactions.push({label:`Reaction ${customMechanism.reactions.length+1}`,type:"bulk_mass_action",reactantsText:"",productsText:"",parameters:parametersForType("bulk_mass_action"),formula:"",parameterText:""});markMechanismChanged();renderBuilderReactions();});
+$("#builder-add-species").addEventListener("click",()=>{customMechanism.species.push({name:`Species_${customMechanism.species.length+1}`,phase:"",charge:0,initial:0,D:1e-5,fit_D:false,D_lower:1e-9,D_upper:1e-3});markMechanismChanged();renderBuilderSpecies();renderBuilderReactions();});
+$("#builder-add-reaction").addEventListener("click",()=>{customMechanism.reactions.push({label:`Reaction ${customMechanism.reactions.length+1}`,type:"",reactantsText:"",productsText:"",parameters:{},formula:"",parameterText:""});markMechanismChanged();renderBuilderReactions();});
 $("#builder-validate").addEventListener("click",()=>validateBuilder().catch(()=>{}));
 $("#builder-export-button").addEventListener("click",exportBuilder);
 $("#builder-import-button").addEventListener("click",()=>$("#builder-import-file").click());

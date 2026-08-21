@@ -278,7 +278,7 @@
     }
 
     supportsCustomMechanism(model) {
-      const allowedReactions=["bulk_mass_action","custom_bulk_rate","solution_electron","surface_electron","adsorption","surface_mass_action","custom_surface_rate"];
+      const allowedReactions=["bulk_mass_action","custom_bulk_rate","solution_electron","surface_electron","adsorption","electroadsorption","surface_mass_action","custom_surface_rate"];
       return Array.isArray(model?.species)
         && model.species.length > 0
         && model.species.length <= 12
@@ -293,14 +293,14 @@
       if(payload?.solver==="pnp")return payload.custom_model.species.every(species=>species.phase==="solution")
         &&payload.custom_model.reactions.every(reaction=>["bulk_mass_action","custom_bulk_rate","solution_electron"].includes(reaction.type));
       if(!supportedIntegrators.includes(payload?.solver))return false;
-      const nonlinearSurface=payload.custom_model.reactions.some(reaction=>["adsorption","surface_mass_action","custom_surface_rate"].includes(reaction.type));
+      const nonlinearSurface=payload.custom_model.reactions.some(reaction=>["adsorption","electroadsorption","surface_mass_action","custom_surface_rate"].includes(reaction.type));
       return !nonlinearSurface||["bdf1","bdf2"].includes(payload.solver);
     }
 
     validateCustom(model) {
       if (!this.supportsCustomMechanism(model)) {
         return Promise.reject(new Error(
-          "Browser-native custom mechanisms support up to 12 solution or surface species with homogeneous, electron-transfer, adsorption, and heterogeneous rate laws."
+          "Browser-native custom mechanisms support up to 12 solution or surface species with homogeneous, electron-transfer, adsorption, electron-transfer adsorption, and heterogeneous rate laws."
         ));
       }
       return this.request("validate_custom_mechanism", {custom_model: model});
@@ -321,9 +321,9 @@
       const fittedSpecies = model?.species?.some(species => species?.fit_D);
       const fittedReaction = model?.reactions?.some(reaction =>
         Object.entries(reaction?.parameters || {}).some(([name, parameter]) =>
-          parameter?.fit && !(["solution_electron","surface_electron"].includes(reaction?.type) && name === "n")));
+          parameter?.fit && !(["solution_electron","surface_electron","electroadsorption"].includes(reaction?.type) && name === "n")));
       const nonlinearSurface=model?.reactions?.some(reaction=>
-        ["adsorption","surface_mass_action","custom_surface_rate"].includes(reaction?.type));
+        ["adsorption","electroadsorption","surface_mass_action","custom_surface_rate"].includes(reaction?.type));
       return payload?.preset === "custom"
         && supportedIntegrators.includes(payload?.solver)
         && this.supportsCustomMechanism(model)
