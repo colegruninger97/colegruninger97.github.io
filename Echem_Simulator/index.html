@@ -62,13 +62,14 @@
               <div id="builder-species" class="builder-species"></div>
               <button id="builder-add-species" class="button secondary small action-button" type="button">Add species</button>
             </section>
-            <section class="setup-editor-section">
-              <div class="section-heading compact"><div><h3>Reactions</h3><p>Use separate forward and reverse rows for reversible homogeneous chemistry.</p></div></div>
+            <section id="builder-reaction-section" class="setup-editor-section">
+              <div class="section-heading compact"><div><h3>Reactions</h3><p>Define the species and their phases first. For each elementary step, enter its participants; EchemLab will then offer only reaction types compatible with those phases.</p></div></div>
+              <p id="builder-reaction-availability" class="helper-text" hidden></p>
               <div id="builder-reactions" class="builder-reactions"></div>
               <button id="builder-add-reaction" class="button secondary small action-button" type="button">Add reaction</button>
-              <details class="rate-language-help advanced-settings">
-                <summary>Custom rate-law formula reference</summary>
-                <div><p>Formulas can use species names, declared parameters, arithmetic, powers, and <code>exp</code>, <code>log</code>, <code>log10</code>, <code>sqrt</code>, <code>abs</code>, <code>min</code>, <code>max</code>, <code>sin</code>, <code>cos</code>, <code>tanh</code>, and <code>ifelse</code>.</p><p>Homogeneous rates return M s⁻¹. Heterogeneous rates return mol cm⁻² s⁻¹. Formula inputs use M for solution species and mol cm⁻² for surface coverages.</p></div>
+              <details id="rate-language-help" class="rate-language-help advanced-settings">
+                <summary>Reaction-type and custom rate-law reference</summary>
+                <div><p><strong>Solution electron transfer</strong> connects two solution species. <strong>Surface-confined electron transfer</strong> connects two surface species. <strong>Adsorption / desorption</strong> moves a species from solution to the surface without transferring an electron. <strong>Electron-transfer adsorption</strong> represents a solution oxidant gaining electrons and becoming a surface-bound reduced product in the same elementary step; its <code>k0</code> is an exchange flux and requires a finite maximum surface coverage.</p><p>Mass-action and custom rate laws describe chemical steps without an electron-transfer current. Formulas can use species names, declared parameters, arithmetic, powers, and <code>exp</code>, <code>log</code>, <code>log10</code>, <code>sqrt</code>, <code>abs</code>, <code>min</code>, <code>max</code>, <code>sin</code>, <code>cos</code>, <code>tanh</code>, and <code>ifelse</code>.</p><p>Homogeneous rates return M s⁻¹. Heterogeneous rates return mol cm⁻² s⁻¹. Formula inputs use M for solution species and mol cm⁻² for surface coverages.</p></div>
               </details>
             </section>
             <section class="setup-editor-section transport-editor">
@@ -327,7 +328,7 @@
           </section>
           <aside class="guide-reference">
             <h3>Current browser scope</h3>
-            <p>Forward simulation, solution/surface parameter fitting, profile and posterior uncertainty, measured-input propagation, standard-library and balanced-network discovery, direct-from-voltammogram sparse rate-law inference, EC′ analytical diagnostics, and PNP transport run entirely in Rust/WebAssembly. Neural UDE training and inference are intentionally excluded.</p>
+            <p>Forward simulation, solution/surface parameter fitting, profile and posterior uncertainty, measured-input propagation, standard-library and balanced-network discovery, direct-from-voltammogram sparse rate-law inference, EC′ analytical diagnostics, adsorption and electron-transfer adsorption, and PNP transport run entirely in Rust/WebAssembly. Neural UDE training and inference are intentionally excluded.</p>
             <h3>Circuit elements</h3>
             <p>Uncompensated resistance and double-layer capacitance are coupled to the interfacial potential for supported-electrolyte templates and declarative mechanisms. PNP instead resolves Stern and diffuse-layer charging explicitly.</p>
             <h3>Scientific use</h3>
