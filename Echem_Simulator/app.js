@@ -248,6 +248,10 @@ function displayResult(result, simulationInput = null) {
   $("#electrolyte-error").hidden = true;
   const diffusion=Number(simulationInput?.custom_model?.species?.find(species=>species.phase==="solution")?.D??simulationInput?.diffusion_coefficient);
   if(Number.isFinite(diffusion)&&diffusion>0)$("#electrolyte-diffusion").value=String(diffusion);
+  if(result.resolution){
+    const retries=Number(result.resolution.rejected_steps||0),refinements=Number(result.resolution.grid_refinements||0);
+    $("#numerical-resolution-status").textContent=`Accepted ${Number(result.resolution.timesteps).toLocaleString()} adaptive steps${retries?` after ${retries.toLocaleString()} retries`:""}; used ${result.resolution.grid_points} surface-refined intervals${refinements?` after ${refinements} mesh refinement${refinements===1?"":"s"}`:""}.`;
+  }
 }
 
 function updateComparisonMetric(){
@@ -292,13 +296,14 @@ function clearSavedTraces(){savedTraces=[];renderSavedTraces();if(latestResult)d
 
 async function runSimulation() {
   clearError(); setLoading(true);
+  $("#numerical-resolution-status").textContent="Selecting resolution for this mechanism…";
   try {
     if (!window.electrochemBrowserEngine) {
       throw new Error("The browser calculation engine did not load. Reload the page and try again.");
     }
     const model=serializeCustomModel();
     await validateBuilder(model);
-    const payload={...payloadFromForm(),preset:"custom",custom_model:model};
+    const payload={...payloadFromForm(),preset:"custom",solver:"bdf1",custom_model:model};
     if($("#builder-transport").value==="pnp"){
       payload.solver="pnp";
       payload.pnp_stern_capacitance=Number($("#builder-pnp-stern").value);
@@ -311,6 +316,7 @@ async function runSimulation() {
     $("#interpretation-text").textContent=payload.solver==="pnp"?"This trace solves migration, diffusion, diffuse charge, the Stern layer, and Frumkin electron transfer together in Rust/WebAssembly.":"This trace was generated from the editable species, reactions, and rate laws shown above.";
   } catch (error) {
     showError(error.message);
+    $("#numerical-resolution-status").textContent="No under-resolved simulation was run.";
   } finally {
     setLoading(false);
   }

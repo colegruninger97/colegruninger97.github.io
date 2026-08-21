@@ -313,53 +313,6 @@ function siteOccupancyRows(reaction,index) {
   return `<fieldset class="site-occupancy-field"><legend>Surface-site occupancy</legend><p>The surface product is counted automatically. Select only additional surface species that occupy the same one-site Langmuir pool.</p><div class="site-occupant-grid">${productsMarkup}${competitorsMarkup}</div></fieldset>`;
 }
 
-function unitPower(unit,power) {
-  if(power===0)return "";
-  return power===1?unit:`${unit}<sup>${power}</sup>`;
-}
-
-function interfacialRateUnits(reaction) {
-  let solutionOrder=0,surfaceOrder=0;
-  try {
-    for(const participant of parseReactionSide(reaction.reactantsText)){
-      const phase=customMechanism.species.find(species=>species.name===participant.species)?.phase;
-      if(phase==="surface")surfaceOrder+=participant.stoich;
-      else solutionOrder+=participant.stoich;
-    }
-  } catch {}
-  return [unitPower("mol",1-solutionOrder-surfaceOrder),unitPower("cm",-2+3*solutionOrder+2*surfaceOrder),"s<sup>-1</sup>"].filter(Boolean).join(" ");
-}
-
-function electroAdsorptionScale(reaction) {
-  const k0=Number(reaction.parameters?.k0?.value),maximum=Number(reaction.parameters?.Gamma_max?.value);
-  let reactant;
-  try{reactant=parseReactionSide(reaction.reactantsText)[0];}catch{return "";}
-  const concentration=Number(customMechanism.species.find(species=>species.name===reactant?.species)?.initial);
-  if(!(k0>0&&maximum>0&&concentration>0))return "";
-  const flux=k0*concentration;
-  if(!(Number.isFinite(flux)&&flux>0))return "";
-  const timescale=maximum/flux;
-  const timestep=Number(document.querySelector('[data-key="timestep"]')?.value);
-  const unresolved=Number.isFinite(timestep)&&timestep/timescale>100;
-  const comparison=Number.isFinite(timestep)?` The selected Δt is ${scientific(timestep/timescale,3)} times this estimate.`:"";
-  return `<div class="kinetic-scale ${unresolved?"warning":""}"><strong>Initial scale at E = E0:</strong> J<sub>red</sub> ≈ k0(c/1 M) = ${scientific(flux,3)} mol cm⁻² s⁻¹ and Γ<sub>max</sub>/J<sub>red</sub> ≈ ${scientific(timescale,3)} s.${comparison}${unresolved?" This rate is not resolved by the selected timestep; reduce k0 or Δt.":""}</div>`;
-}
-
-function reactionMathRows(reaction) {
-  if(reaction.type==="surface_mass_action"){
-    let phases=[];
-    try{phases=[...parseReactionSide(reaction.reactantsText),...parseReactionSide(reaction.productsText)].map(participant=>customMechanism.species.find(species=>species.name===participant.species)?.phase);}catch{}
-    const mixed=phases.includes("solution")&&phases.includes("surface");
-    const summary=mixed?"Why this mixed-phase reaction is allowed · math and Rust":"Interfacial mass-action math and Rust";
-    const explanation=mixed?"This represents an irreversible chemical event at the interface, such as <code>A_sol + B_ads → C_ads</code>.":"This represents an irreversible chemical event among surface-bound species.";
-    return `<details class="reaction-math"><summary>${summary}</summary><div><p>${explanation} It is not electron transfer and contributes no faradaic current.</p><div class="math-expression">J = k ∏<sub>solution reactants</sub>(10⁻³ cᵢ)<sup>νᵢ</sup> ∏<sub>surface reactants</sub>Γⱼ<sup>νⱼ</sup></div><p><code>c</code> is entered in M and converted to mol cm⁻³; <code>Γ</code> is mol cm⁻². <code>J</code> is mol cm⁻² s⁻¹, so this reaction’s <code>k</code> has units ${interfacialRateUnits(reaction)}. Products affect the material balances but not this irreversible rate expression. There is no vacant-site factor; use Adsorption / desorption or a custom interfacial law when site saturation matters.</p><pre><code>rate = reactants.fold(k, |r, p| r * value(p).powi(p.stoich));</code></pre></div></details>`;
-  }
-  if(reaction.type==="electroadsorption")return `<details class="reaction-math"><summary>Concerted adsorption math and Rust</summary><div><div class="math-expression">J = k0[e<sup>−αnFη/RT</sup>a<sub>Ox</sub>(1−θ<sub>occ</sub>) − e<sup>(1−α)nFη/RT</sup>θ<sub>Red</sub>]</div><p>η = E − E0, a<sub>Ox</sub> is represented by the numerical concentration relative to 1 M, θ<sub>Red</sub> = Γ<sub>Red</sub>/Γ<sub>max</sub>, and i<sub>F</sub> = nFAJ. Because <code>k0</code> is an exchange <em>flux</em>, a value of 1 mol cm⁻² s⁻¹ is enormous for a site capacity near 10⁻¹⁰ mol cm⁻².</p><pre><code>flux = k0*reduction*c*(1.0 - occupied)<br>     - k0*oxidation*coverage/Gamma_max;</code></pre>${electroAdsorptionScale(reaction)}</div></details>`;
-  if(reaction.type==="adsorption")return `<details class="reaction-math"><summary>Adsorption math and Rust</summary><div><div class="math-expression">J = 10⁻³ k<sub>ads</sub>c(1−θ<sub>occ</sub>) − k<sub>des</sub>Γ</div><p>This step changes the boundary concentration and surface coverage but contributes no faradaic current. Set Γ<sub>max</sub> to zero only for unsaturated Henry behavior.</p><pre><code>flux = 1e-3*k_ads*c*(1.0 - occupied) - k_des*coverage;</code></pre></div></details>`;
-  if(reaction.type==="custom_surface_rate")return `<details class="reaction-math"><summary>Custom interfacial-rate contract</summary><div><p>The formula receives solution species in M and surface species in mol cm⁻². It must return an interfacial flux in mol cm⁻² s⁻¹. EchemLab applies that flux to every reactant and product balance; it produces no faradaic current.</p></div></details>`;
-  return "";
-}
-
 function parameterRows(reaction,index) {
   if(!reaction.type)return `<p class="helper-text reaction-parameter-prompt">Choose a compatible reaction type to enter its kinetic parameters.</p>`;
   if(reaction.type.startsWith("custom_")){
@@ -367,11 +320,11 @@ function parameterRows(reaction,index) {
     return `<div class="custom-rate-grid">
     <label class="field"><span>Rate formula</span><input data-builder-reaction="${index}" data-builder-reaction-key="formula" value="${escapeHTML(reaction.formula||"")}" placeholder="k*Red/(Km + Red)"></label>
     <label class="field"><span>Parameters <b>name=value; …</b></span><input data-builder-reaction="${index}" data-builder-reaction-key="parameterText" value="${escapeHTML(reaction.parameterText||"")}" placeholder="k=1.0; Km=0.001"></label>
-  </div>${reactionMathRows(reaction)}`;
+  </div>`;
   }
   const occupancy=["adsorption","electroadsorption"].includes(reaction.type)?siteOccupancyRows(reaction,index):"";
   return `<div class="builder-parameter-head" aria-hidden="true"><span>Parameter</span><span>Simulation value</span></div>`+
-    Object.entries(reaction.parameters).map(([name,p])=>`<div class="builder-parameter-row"><span><strong>${escapeHTML(name)}</strong><small>${escapeHTML(reactionParameterMeta[reaction.type]?.[name]?.[5]||"")}</small></span><input aria-label="${name} simulation value" data-builder-param="${index}" data-builder-param-name="${name}" data-builder-param-key="value" type="number" step="any" value="${p.value}"></div>`).join("")+occupancy+reactionMathRows(reaction);
+    Object.entries(reaction.parameters).map(([name,p])=>`<div class="builder-parameter-row"><span><strong>${escapeHTML(name)}</strong><small>${escapeHTML(reactionParameterMeta[reaction.type]?.[name]?.[5]||"")}</small></span><input aria-label="${name} simulation value" data-builder-param="${index}" data-builder-param-name="${name}" data-builder-param-key="value" type="number" step="any" value="${p.value}"></div>`).join("")+occupancy;
 }
 
 function renderBuilderReactions() {
@@ -398,7 +351,7 @@ function renderBuilderReactions() {
   $$('[data-builder-reaction-key]').forEach(input=>input.addEventListener("input",()=>{customMechanism.reactions[+input.dataset.builderReaction][input.dataset.builderReactionKey]=input.value;markMechanismChanged();}));
   $$('[data-builder-reaction-key="reactantsText"], [data-builder-reaction-key="productsText"]').forEach(input=>input.addEventListener("change",renderBuilderReactions));
   $$('[data-builder-reaction-type]').forEach(select=>select.addEventListener("change",()=>{const r=customMechanism.reactions[+select.dataset.builderReactionType];r.type=select.value;r.formula=select.value.startsWith("custom_")?"k*"+(customMechanism.species[0]?.name||"A"):"";r.parameterText=select.value.startsWith("custom_")?"k=1":"";r.parameters=select.value.startsWith("custom_")?inferCustomParameters(r.parameterText):parametersForType(select.value);r.blockingSpecies=[];markMechanismChanged();renderBuilderReactions();}));
-  $$('[data-builder-param]').forEach(input=>input.addEventListener("change",()=>{const reaction=customMechanism.reactions[+input.dataset.builderParam],p=reaction.parameters[input.dataset.builderParamName];p[input.dataset.builderParamKey]=+input.value;markMechanismChanged();if(reaction.type==="electroadsorption"&&["k0","Gamma_max"].includes(input.dataset.builderParamName))renderBuilderReactions();}));
+  $$('[data-builder-param]').forEach(input=>input.addEventListener("change",()=>{const reaction=customMechanism.reactions[+input.dataset.builderParam],p=reaction.parameters[input.dataset.builderParamName];p[input.dataset.builderParamKey]=+input.value;markMechanismChanged();}));
   $$('[data-builder-site-occupant]').forEach(input=>input.addEventListener("change",()=>{const index=+input.dataset.builderSiteOccupant;customMechanism.reactions[index].blockingSpecies=$$(`[data-builder-site-occupant="${index}"]:checked`).map(checkbox=>checkbox.value);markMechanismChanged();}));
   $$('[data-builder-reaction-key="parameterText"]').forEach(input=>input.addEventListener("change",()=>{const reaction=customMechanism.reactions[+input.dataset.builderReaction];syncCustomParameters(reaction);markMechanismChanged();renderBuilderReactions();}));
   $$('[data-builder-remove-reaction]').forEach(button=>button.addEventListener("click",()=>{customMechanism.reactions.splice(+button.dataset.builderRemoveReaction,1);markMechanismChanged();renderBuilderReactions();}));
@@ -458,5 +411,4 @@ $("#builder-export-button").addEventListener("click",exportBuilder);
 $("#builder-import-button").addEventListener("click",()=>$("#builder-import-file").click());
 $("#builder-import-file").addEventListener("change",async event=>{try{setBuilderTransport("standard");hydrateCustomModel(JSON.parse(await event.target.files[0].text()));markMechanismChanged();await validateBuilder();}catch(error){setBuilderError(error.message);}finally{event.target.value="";}});
 $("#builder-transport").addEventListener("change",event=>{setBuilderTransport(event.target.value);markMechanismChanged();});
-document.querySelector('[data-key="timestep"]').addEventListener("change",renderBuilderReactions);
 selectPreset(currentPreset);
