@@ -52,7 +52,7 @@
         <section class="control-panel" aria-labelledby="conditions-heading">
           <div class="mechanism-section" aria-labelledby="mechanism-heading">
             <div class="section-heading compact"><div><h3 id="mechanism-heading">Mechanism</h3></div></div>
-            <label class="template-select-field"><span>Reaction scheme</span><select id="preset-select"><option value="solution_e">E — solution electron transfer</option><option value="solution_ec">EC — following homogeneous reaction</option><option value="solution_ce">CE — preceding homogeneous reaction</option><option value="solution_ece">ECE — two electron-transfer steps</option><option value="solution_ececprime">ECEC′ — homogeneous two-stage catalyst</option><option value="electrografting">Aryldiazonium electrografting — passivating film growth</option></select></label>
+            <label class="template-select-field"><span>Reaction scheme</span><select id="preset-select"><option value="solution_e">E — solution electron transfer</option><option value="solution_ec">EC — following homogeneous reaction</option><option value="solution_ecprime">EC′ — homogeneous catalytic regeneration</option><option value="solution_ce">CE — preceding homogeneous reaction</option><option value="solution_ece">ECE — two electron-transfer steps</option><option value="solution_ececprime">ECEC′ — homogeneous two-stage catalyst</option></select></label>
             <div id="mechanism-equation" class="equation-panel" aria-live="polite"></div>
             <p id="template-note" class="template-note"></p>
             <div class="custom-model-prompt"><div><strong>Custom mechanism</strong><span>Define solution species, elementary steps, and custom rate laws.</span></div><button class="button secondary small" type="button" data-view-target="builder">Mechanism builder</button></div>
@@ -146,8 +146,8 @@
           <div class="inline-actions builder-top-actions"><button id="builder-import-button" class="button secondary" type="button">Import JSON</button><button id="builder-export-button" class="button secondary" type="button">Export JSON</button><input id="builder-import-file" type="file" accept="application/json,.json" hidden></div>
         </section>
         <section class="full-panel">
-          <div class="section-heading"><span class="step-chip">A</span><div><h3>Species inventory</h3><p>Names become symbols in custom formulas, so use letters, numbers, and underscores.</p></div></div>
-          <div class="builder-species-head" aria-hidden="true"><span>Name</span><span>Phase</span><span>Charge z</span><span>Initial concentration</span><span>Diffusion coefficient</span><span>Fit</span><span></span></div>
+          <div class="section-heading"><span class="step-chip">A</span><div><h3>Species inventory</h3><p>Names become symbols in custom formulas, so use letters, numbers, and underscores. Normally fix diffusion coefficients from independent measurements; estimate D only when several scan rates and well-known concentrations and electrode area provide enough information.</p></div></div>
+          <div class="builder-species-head" aria-hidden="true"><span>Name</span><span>Phase</span><span>Charge z</span><span>Initial concentration</span><span>Diffusion coefficient</span><span>Fit D (advanced)</span><span></span></div>
           <div id="builder-species" class="builder-species"></div>
           <button id="builder-add-species" class="button secondary small action-button" type="button">Add species</button>
         </section>
@@ -345,7 +345,7 @@
           </section>
           <aside class="guide-reference">
             <h3>Current browser scope</h3>
-            <p>Forward simulation, solution/surface parameter fitting, profile and posterior uncertainty, measured-input propagation, standard-library and balanced-network discovery, direct-from-voltammogram sparse rate-law inference, EC′ analytical diagnostics, PNP transport, and electrografting run entirely in Rust/WebAssembly. Neural UDE training and inference are intentionally excluded.</p>
+            <p>Forward simulation, solution/surface parameter fitting, profile and posterior uncertainty, measured-input propagation, standard-library and balanced-network discovery, direct-from-voltammogram sparse rate-law inference, EC′ analytical diagnostics, and PNP transport run entirely in Rust/WebAssembly. Neural UDE training and inference are intentionally excluded.</p>
             <h3>Circuit elements</h3>
             <p>Uncompensated resistance and double-layer capacitance are coupled to the interfacial potential for supported-electrolyte templates and declarative mechanisms. PNP instead resolves Stern and diffuse-layer charging explicitly.</p>
             <h3>Scientific use</h3>

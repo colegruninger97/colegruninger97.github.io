@@ -59,20 +59,16 @@ const presets = {
       ["catalytic_rate", "Homogeneous catalytic rate", "M⁻¹ s⁻¹", 1e4, 1e3]
     ]
   },
-  electrografting: {
-    equation: "ArN₂⁺ + e⁻ → ArN₂• → Ar• → grafted film",
-    interpretation: "A mean-field aryldiazonium model with diffusion-limited activation, irreversible film growth, exponential passivation, radical reduction, hydrogen current, and reversible interfacial blocking. The component currents are plotted separately.",
+  solution_ecprime: {
+    equation: "Ox + e⁻ ⇌ Red  ·  Red + S → Ox + P",
+    interpretation: "A homogeneous EC′ catalytic cycle. Electron transfer forms Red, which reacts with excess substrate S and regenerates Ox. The catalytic rate and substrate concentration control the current enhancement.",
     fields: [
-      ["diazonium_concentration", "Diazonium concentration", "M", 0.01, 0.001],
-      ["diazonium_diffusion_coefficient", "Diazonium diffusion coefficient", "cm² s⁻¹", 7e-6, 1e-6],
-      ["diazonium_formal_potential", "Diazonium formal potential", "V", -0.30, 0.01],
-      ["diazonium_electron_transfer_rate", "Diazonium electron-transfer rate", "cm s⁻¹", 0.002, 0.001],
-      ["diazonium_transfer_coefficient", "Diazonium transfer coefficient", "", 0.7, 0.05],
-      ["maximum_coverage", "Maximum film coverage", "mol cm⁻²", 3.2e-9, 1e-10],
-      ["passivation_coefficient", "Passivation coefficient", "per monolayer", 1.35, 0.05],
-      ["aryl_grafting_rate", "Aryl grafting rate", "s⁻¹", 4000, 100],
-      ["radical_reduction_rate", "Radical reduction rate", "s⁻¹", 20000, 1000],
-      ["hydrogen_exchange_current_density", "Hydrogen exchange current density", "A cm⁻²", 2e-5, 1e-6]
+      ["bulk_concentration", "Catalyst concentration", "M", 0.001, 0.0001],
+      ["substrate_concentration", "Substrate concentration", "M", 0.01, 0.001],
+      ["diffusion_coefficient", "Shared diffusion coefficient", "cm² s⁻¹", 1e-5, 1e-6],
+      ["formal_potential", "Formal potential E⁰", "V", 0, 0.01],
+      ["electron_transfer_rate", "Electron-transfer rate k⁰", "cm s⁻¹", 0.01, 0.001],
+      ["catalytic_rate", "Catalytic rate kcat", "M⁻¹ s⁻¹", 1000, 100]
     ]
   }
 };
@@ -291,11 +287,6 @@ function displayResult(result, simulationInput = null) {
 
 function updateComparisonMetric(){
   if(!latestResult){$("#enhancement").textContent="—";return;}
-  if(latestResult.film_coverage){
-    $("#enhancement-label").textContent="Final film coverage";
-    $("#enhancement").textContent=`${Number(latestResult.film_coverage.at(-1)).toExponential(3)} mol cm⁻²`;
-    return;
-  }
   if(latestResult.surface_coverages?.length){
     const total=latestResult.surface_coverages.reduce((sum,trace)=>sum+Number(trace.coverage.at(-1)||0),0);
     $("#enhancement-label").textContent="Final surface coverage";

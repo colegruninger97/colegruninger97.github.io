@@ -149,7 +149,7 @@ function renderBuilderSpecies() {
     <input aria-label="Species charge" data-builder-species="${i}" data-builder-species-key="charge" type="number" step="1" value="${Number(s.charge||0)}" ${s.phase==="surface"?"disabled title=\"PNP charge applies to mobile species\"":""}>
     <input aria-label="Initial amount" data-builder-species="${i}" data-builder-species-key="initial" type="number" value="${s.initial}" step="any">
     <input aria-label="Diffusion coefficient" data-builder-species="${i}" data-builder-species-key="D" type="number" value="${s.D}" step="any" ${s.phase==="surface"?"disabled title=\"Surface coverage does not diffuse\"":""}>
-    <label class="fit-toggle"><input aria-label="Estimate ${escapeHTML(s.name)} diffusion coefficient" data-builder-species="${i}" data-builder-species-key="fit_D" type="checkbox" ${s.fit_D?"checked":""} ${s.phase==="surface"?"disabled":""}>${s.phase==="surface"?"Coverage Γ":"Estimate D"}</label>
+    <label class="fit-toggle" ${s.phase==="surface"?"":'title="Advanced: use several scan rates and independently known concentration and electrode area"'}><input aria-label="Estimate ${escapeHTML(s.name)} diffusion coefficient (advanced)" data-builder-species="${i}" data-builder-species-key="fit_D" type="checkbox" ${s.fit_D?"checked":""} ${s.phase==="surface"?"disabled":""}>${s.phase==="surface"?"Coverage Γ":"Estimate D"}</label>
     <button class="remove-dataset" data-builder-remove-species="${i}" type="button" aria-label="Remove ${escapeHTML(s.name)}">×</button>
   </div>`).join("");
   $$('[data-builder-species-key]').forEach(input=>input.addEventListener("change",()=>{
