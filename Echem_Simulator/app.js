@@ -78,8 +78,25 @@ const presets = {
 };
 
 const colors = ["#4d82a7", "#7bafd4", "#75848e", "#a9bac5"];
+const voltammogramConventions = Object.freeze({
+  us: Object.freeze({
+    currentMultiplier: 1,
+    reversePotentialAxis: true,
+    label: "U.S.",
+    filename: "us",
+    note: "U.S. convention: cathodic current is positive and more negative potentials appear to the right."
+  }),
+  iupac: Object.freeze({
+    currentMultiplier: -1,
+    reversePotentialAxis: false,
+    label: "IUPAC",
+    filename: "iupac",
+    note: "IUPAC convention: anodic current is positive and more positive potentials appear to the right."
+  })
+});
 let latestResult = null;
 let currentPreset = "solution_e";
+let voltammogramConvention = "us";
 let savedTraces = [];
 let simulationRun = 0;
 let savedTraceSequence = 0;
@@ -160,12 +177,40 @@ function formatCurrent(value) {
   return `${(value * unit.scale).toPrecision(4)} ${unit.label}`;
 }
 
+function activeVoltammogramConvention() {
+  return voltammogramConventions[voltammogramConvention];
+}
+
+function displayedCurrent(value) {
+  return activeVoltammogramConvention().currentMultiplier * value;
+}
+
+function updatePeakCurrentDisplay() {
+  if (!latestResult) return;
+  $("#peak-current").textContent = formatCurrent(displayedCurrent(latestResult.summary.peak_current));
+}
+
+function selectVoltammogramConvention(name) {
+  if (!Object.hasOwn(voltammogramConventions, name)) return;
+  voltammogramConvention = name;
+  $$('[data-plot-convention]').forEach(button => {
+    const selected = button.dataset.plotConvention === name;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+  $("#plot-convention-note").textContent = activeVoltammogramConvention().note;
+  if (latestResult) {
+    drawChart(latestResult);
+    updatePeakCurrentDisplay();
+  }
+}
+
 function chartSeries(result) {
-  const series=result.series.map((item,index)=>({name:item.name,current:item.current,potential:result.potential,
+  const series=result.series.map((item,index)=>({name:item.name,current:item.current.map(displayedCurrent),potential:result.potential,
     color:colors[index%colors.length],saved:false}));
   if($("#show-saved-traces")?.checked){
     const savedColors=["#7f8d96","#9aa7af","#6f8290","#adb8be","#879ba8"];
-    savedTraces.filter(trace=>trace.runToken!==result._runToken).forEach((trace,index)=>series.push({...trace,color:savedColors[index%savedColors.length],saved:true}));
+    savedTraces.filter(trace=>trace.runToken!==result._runToken).forEach((trace,index)=>series.push({...trace,current:trace.current.map(displayedCurrent),color:savedColors[index%savedColors.length],saved:true}));
   }
   return series;
 }
@@ -190,14 +235,15 @@ function drawChart(result) {
   const yspan = Math.max(ymax-ymin, Math.max(Math.abs(ymin),Math.abs(ymax))*0.1, 1e-12);
   ymin -= .08*yspan; ymax += .08*yspan;
   const unit = currentUnit(Math.max(Math.abs(ymin), Math.abs(ymax)));
-  const xpx = x => pad.left + (x-xmin)/(xmax-xmin)*plotW;
+  const reversePotentialAxis = activeVoltammogramConvention().reversePotentialAxis;
+  const xpx = x => pad.left + (reversePotentialAxis ? (xmax-x) : (x-xmin))/(xmax-xmin)*plotW;
   const ypx = y => pad.top + (ymax-y)/(ymax-ymin)*plotH;
 
   ctx.clearRect(0,0,width,height);
   ctx.fillStyle = "#fbfcfb"; ctx.fillRect(0,0,width,height);
   ctx.font = "11px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
   for (let i=0;i<=5;i++) {
-    const x = xmin + (xmax-xmin)*i/5, px = xpx(x);
+    const x = reversePotentialAxis ? xmax-(xmax-xmin)*i/5 : xmin+(xmax-xmin)*i/5, px = xpx(x);
     ctx.strokeStyle = "#e2e8e5"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(px,pad.top); ctx.lineTo(px,pad.top+plotH); ctx.stroke();
     ctx.fillStyle = "#60747b"; ctx.fillText(x.toFixed(2),px,pad.top+plotH+10);
@@ -230,7 +276,7 @@ function displayResult(result, simulationInput = null) {
   result._simulationInput=simulationInput;
   latestResult = result;
   drawChart(result);
-  $("#peak-current").textContent = formatCurrent(result.summary.peak_current);
+  updatePeakCurrentDisplay();
   $("#peak-potential").textContent = `${result.summary.peak_potential.toFixed(4)} V`;
   updateComparisonMetric();
   $("#solver-time").textContent = `${result.elapsed_seconds.toFixed(3)} s`;
@@ -349,14 +395,15 @@ async function screenSupportingElectrolyte(){
 
 function downloadCSV() {
   if (!latestResult) return;
+  const convention=activeVoltammogramConvention();
   const coverages=latestResult.surface_coverages||[];
   const pnpFields=latestResult.concentrations||[];
-  const pnpHeaders=latestResult.debye_length?["faradaic_current_A","charging_current_A","surface_solution_potential_V",...pnpFields.map(field=>`${field.name.replaceAll(" ","_")}_at_electrode_M`)]:[];
-  const headers = ["time_s","potential_V",...latestResult.series.map(s => `${s.name.replaceAll(" ","_")}_A`),...coverages.map(trace=>`${trace.name.replaceAll(" ","_")}_mol_cm-2`),...pnpHeaders];
+  const pnpHeaders=latestResult.debye_length?[`faradaic_current_A_${convention.filename}`,`charging_current_A_${convention.filename}`,"surface_solution_potential_V",...pnpFields.map(field=>`${field.name.replaceAll(" ","_")}_at_electrode_M`)]:[];
+  const headers = ["time_s","potential_V",...latestResult.series.map(s => `${s.name.replaceAll(" ","_")}_A_${convention.filename}`),...coverages.map(trace=>`${trace.name.replaceAll(" ","_")}_mol_cm-2`),...pnpHeaders];
   const rows = [headers.join(",")];
-  for (let i=0;i<latestResult.points;i++) rows.push([latestResult.time[i],latestResult.potential[i],...latestResult.series.map(s=>s.current[i]),...coverages.map(trace=>trace.coverage[i]),...(latestResult.debye_length?[latestResult.faradaic_current[i],latestResult.charging_current[i],latestResult.solution_potential[i+1][0],...pnpFields.map(field=>field.values[i+1][0])]:[])].join(","));
+  for (let i=0;i<latestResult.points;i++) rows.push([latestResult.time[i],latestResult.potential[i],...latestResult.series.map(s=>displayedCurrent(s.current[i])),...coverages.map(trace=>trace.coverage[i]),...(latestResult.debye_length?[displayedCurrent(latestResult.faradaic_current[i]),displayedCurrent(latestResult.charging_current[i]),latestResult.solution_potential[i+1][0],...pnpFields.map(field=>field.values[i+1][0])]:[])].join(","));
   const blob = new Blob([rows.join("\n")], {type:"text/csv"});
-  const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `${latestResult.preset}_voltammogram.csv`; link.click();
+  const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `${latestResult.preset}_voltammogram_${convention.filename}.csv`; link.click();
   URL.revokeObjectURL(link.href);
 }
 
@@ -379,6 +426,7 @@ $("#run-button").addEventListener("click", runSimulation);
 $("#save-trace-button").addEventListener("click",saveCurrentTrace);
 $("#show-saved-traces").addEventListener("change",()=>latestResult&&drawChart(latestResult));
 $("#clear-saved-traces").addEventListener("click",clearSavedTraces);
+$$('[data-plot-convention]').forEach(button=>button.addEventListener("click",()=>selectVoltammogramConvention(button.dataset.plotConvention)));
 $("#download-button").addEventListener("click", downloadCSV);
 $("#electrolyte-check-button").addEventListener("click",screenSupportingElectrolyte);
 $("#reset-button").addEventListener("click", () => { location.reload(); });

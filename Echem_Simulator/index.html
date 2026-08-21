@@ -93,12 +93,21 @@
         <section class="results-panel" aria-labelledby="result-heading">
           <div class="result-header">
             <div><p class="eyebrow">Simulated response</p><h3 id="result-heading">Cyclic voltammogram</h3></div>
-            <div class="result-actions"><button id="save-trace-button" class="button secondary small" type="button" disabled>Save comparison</button><button id="download-button" class="button secondary small" type="button" disabled>Export CSV</button></div>
+            <div class="result-actions">
+              <div class="plot-convention" role="group" aria-label="Voltammogram plotting convention">
+                <span>Plot</span>
+                <button class="convention-button active" type="button" data-plot-convention="us" aria-pressed="true" title="Cathodic current positive; negative potentials to the right">U.S.</button>
+                <button class="convention-button" type="button" data-plot-convention="iupac" aria-pressed="false" title="Anodic current positive; positive potentials to the right">IUPAC</button>
+              </div>
+              <button id="save-trace-button" class="button secondary small" type="button" disabled>Save comparison</button>
+              <button id="download-button" class="button secondary small" type="button" disabled>Export CSV</button>
+            </div>
           </div>
           <div class="chart-wrap">
             <canvas id="cv-chart" role="img" aria-label="Simulated current versus potential"></canvas>
           </div>
           <div id="legend" class="legend" aria-label="Plot legend"></div>
+          <p id="plot-convention-note" class="plot-convention-note">U.S. convention: cathodic current is positive and more negative potentials appear to the right.</p>
           <div id="saved-trace-bar" class="saved-trace-bar" hidden><label><input id="show-saved-traces" type="checkbox" checked><span>Show saved traces</span></label><div id="saved-trace-list" class="saved-trace-list"></div><button id="clear-saved-traces" class="button quiet small" type="button">Clear saved</button></div>
           <div class="metric-grid">
             <article class="metric"><span>Peak current</span><strong id="peak-current">—</strong></article>
