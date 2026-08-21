@@ -80,7 +80,7 @@
                   <p><strong>Solution electron transfer</strong> connects two solution species. <strong>Surface-confined electron transfer</strong> connects two surface species. Plain <strong>Adsorption / desorption</strong> transfers no electron and produces no faradaic current. Concerted electron-transfer adsorption does produce faradaic current; its <code>k0</code> is an exchange flux and requires a finite maximum surface coverage.</p>
                   <p><strong>Interfacial mass action</strong> is available when a step contains a surface species because dissolved and adsorbed species can react chemically at the interface—for example, <code>A_sol + B_ads → C_ads</code>. It is irreversible, includes no electron-transfer current, and has no vacant-site factor. Use Adsorption / desorption when the intended step is site-limited binding.</p>
                   <p>Mass-action and custom rate laws describe chemical steps without an electron-transfer current. Formulas can use species names, declared parameters, arithmetic, powers, and <code>exp</code>, <code>log</code>, <code>log10</code>, <code>sqrt</code>, <code>abs</code>, <code>min</code>, <code>max</code>, <code>sin</code>, <code>cos</code>, <code>tanh</code>, and <code>ifelse</code>.</p>
-                  <p>Homogeneous rates return M s⁻¹. Interfacial rates return mol cm⁻² s⁻¹. Formula inputs use M for solution species and mol cm⁻² for surface coverages. Expand the math-and-Rust reference shown beneath a selected interfacial reaction to see its exact equation and units.</p>
+                  <p>Homogeneous rates return M s⁻¹. Interfacial rates return mol cm⁻² s⁻¹. Formula inputs use M for solution species and mol cm⁻² for surface coverages.</p>
                 </div>
               </details>
             </section>
@@ -114,9 +114,7 @@
           <details class="advanced-settings">
             <summary>Numerical settings</summary>
             <div class="field-grid inset">
-              <label class="field"><span>Time step (Δt) <b>s</b></span><input data-key="timestep" type="number" min="0.000001" step="0.0001" value="0.001"></label>
-              <label class="field"><span>Spatial grid points</span><input data-key="grid_points" type="number" min="8" max="512" step="1" value="64"></label>
-              <label id="time-integrator-field" class="field"><span>Time integrator</span><select data-key="solver"><option value="bdf1">Implicit BDF1</option><option value="bdf2">Implicit BDF2</option><option value="be_fe">BE/FE (semi-implicit)</option><option value="trap_ab2">TRAP/AB2 (semi-implicit)</option></select></label>
+              <div id="time-integrator-field" class="automatic-resolution"><strong>Adaptive fully implicit solver</strong><p>EchemLab estimates local error, accepts or retries each timestep, and grows the step again when the response becomes smooth. It also checks a finer near-electrode grid and refines the mesh when necessary.</p><span id="numerical-resolution-status">Adaptation begins when the simulation starts.</span></div>
             </div>
           </details>
 

@@ -57,9 +57,9 @@
       const parameterValue=(reaction,name,fallback=0)=>Number(reaction?.parameters?.[name]?.value??fallback);
       const participants=side=>(side||[]).map(item=>({species:item.species,stoich:Number(item.stoich||1)}));
       return {
-        grid_points:Number(payload.grid_points),temperature:Number(payload.temperature),
+        grid_points:Number(payload.grid_points??64),temperature:Number(payload.temperature),
         start_potential:Number(payload.start_potential),switching_potential:Number(payload.switching_potential),
-        scan_rate:Number(payload.scan_rate),timestep:Number(payload.timestep),
+        scan_rate:Number(payload.scan_rate),timestep:Number(payload.timestep??0.001),
         electrode_area:Number(payload.electrode_area),solution_resistance:Number(payload.solution_resistance||0),
         species:model.species.map(species=>({name:species.name,charge:Number(species.charge||0),
           bulk_concentration:Number(species.initial),diffusion_coefficient:Number(species.D)})),
