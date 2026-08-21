@@ -102,6 +102,7 @@ function selectPreset(name) {
 function payloadFromForm() {
   const payload = {};
   $$('[data-key]').forEach(input => {
+    if (input.disabled) return;
     payload[input.dataset.key] = input.tagName === "SELECT" ? input.value : Number(input.value);
   });
   return payload;
