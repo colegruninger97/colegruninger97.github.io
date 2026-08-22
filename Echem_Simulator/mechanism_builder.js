@@ -3,7 +3,8 @@ const reactionTypeLabels = {
   solution_electron: "Solution electron transfer",
   custom_bulk_rate: "Custom homogeneous rate law",
   surface_electron: "Surface-confined electron transfer",
-  adsorption: "Adsorption / desorption",
+  adsorption: "Adsorption (solution → surface)",
+  desorption: "Desorption (surface → solution)",
   electroadsorption: "Concerted electron-transfer adsorption (solution → surface)",
   surface_mass_action: "Interfacial mass action (no electron transfer)",
   custom_surface_rate: "Custom interfacial rate law (no electron transfer)"
@@ -25,9 +26,9 @@ const reactionParameterMeta = {
   },
   adsorption: {
     k_ads:[0.001,true,1e-12,1e6,"log","adsorption rate (cm s⁻¹)"],
-    k_des:[1,true,1e-12,1e12,"log","desorption rate (s⁻¹)"],
     Gamma_max:[1e-10,false,0,1e-6,"identity","maximum coverage (mol cm⁻²; 0 = Henry)"]
   },
+  desorption: {k_des:[1,true,1e-12,1e12,"log","desorption rate (s⁻¹)"]},
   electroadsorption: {
     E0:[0,true,-2,2,"identity","conditional formal potential (V)"],
     k0:[1e-10,true,1e-20,1e-4,"log","standard exchange flux (mol cm⁻² s⁻¹)"],
@@ -159,9 +160,9 @@ function reactionTypeState(reaction) {
     return {types,guidance:unitPair?"All participants are surface-bound. Choose surface electron transfer for a redox pair, or interfacial mass action for a chemical step with no electron-transfer current.":"All participants are surface-bound, so only interfacial chemical kinetics are available for this stoichiometry."};
   }
   const solutionToSurface=unitPair&&phaseOf(reactants[0].species)==="solution"&&phaseOf(products[0].species)==="surface";
-  if(solutionToSurface)return {types:["electroadsorption","adsorption","surface_mass_action","custom_surface_rate"],guidance:"This is a solution → surface pair. Concerted electron-transfer adsorption includes current; adsorption / desorption includes a finite site pool but no current. Interfacial mass action is an irreversible, nonfaradaic conversion with no vacant-site factor unless you add one through a custom rate law."};
+  if(solutionToSurface)return {types:["electroadsorption","adsorption","surface_mass_action","custom_surface_rate"],guidance:"This is a solution → surface pair. Adsorption is one-way and site-limited; add a separate surface → solution desorption row when the model needs the reverse process. Concerted electron-transfer adsorption includes current. Interfacial mass action is nonfaradaic and has no vacant-site factor unless you add one through a custom rate law."};
   const surfaceToSolution=unitPair&&phaseOf(reactants[0].species)==="surface"&&phaseOf(products[0].species)==="solution";
-  if(surfaceToSolution)return {types:["surface_mass_action","custom_surface_rate"],guidance:"For a reversible adsorption or concerted electron-transfer adsorption step, write the equation in the solution → surface direction. The reverse process is included by its desorption or oxidation rate."};
+  if(surfaceToSolution)return {types:["desorption","surface_mass_action","custom_surface_rate"],guidance:"This is a surface → solution pair. Choose desorption for a one-way release step. Add a separate solution → surface adsorption row when both directions form an adsorption equilibrium."};
   return {types:["surface_mass_action","custom_surface_rate"],guidance:"This is an interfacial chemical step, such as a dissolved reactant attacking an adsorbed intermediate. It changes solution concentrations and surface coverages but produces no electron-transfer current."};
 }
 
@@ -231,6 +232,37 @@ function serializeCustomModel() {
   return {name:customMechanism.name||"Custom mechanism",species,reactions,film};
 }
 
+function hydrateImportedReaction(rawReaction,index,type=rawReaction.type||"bulk_mass_action") {
+  const defaults=parametersForType(type),incoming=rawReaction.parameters||{};
+  const names=type.startsWith("custom_")?Object.keys(incoming):Object.keys(defaults);
+  const parameters=Object.fromEntries(names.map(name=>{
+    const fallback=defaults[name]||{},rawParameter=incoming[name];
+    const supplied=typeof rawParameter==="number"?{value:rawParameter}:(rawParameter||{});
+    return [name,{...fallback,...supplied,fit:Boolean(supplied.fit)}];
+  }));
+  return {label:rawReaction.label||`Reaction ${index+1}`,type,
+    reactantsText:rawReaction.reactantsText??sideToText(rawReaction.reactants),productsText:rawReaction.productsText??sideToText(rawReaction.products),
+    parameters,formula:rawReaction.formula||"",
+    parameterText:rawReaction.parameterText||Object.entries(incoming).map(([name,parameter])=>`${name}=${typeof parameter==="number"?parameter:parameter.value}`).join("; "),
+    blockingSpecies:type==="desorption"?[]:[...(rawReaction.blocking_species||[])],interface:rawReaction.interface||"bare"};
+}
+
+function hydrateImportedReactions(rawReactions) {
+  return rawReactions.flatMap((reaction,index)=>{
+    const hydrated=hydrateImportedReaction(reaction,index);
+    if(hydrated.type!=="adsorption"||!Object.prototype.hasOwnProperty.call(reaction.parameters||{},"k_des"))return [hydrated];
+    const rawDesorption=reaction.parameters.k_des;
+    const desorptionParameter=typeof rawDesorption==="number"?{value:rawDesorption}:{...rawDesorption};
+    if(Number(desorptionParameter.value||0)===0&&!desorptionParameter.fit)return [hydrated];
+    const reverse=hydrateImportedReaction({
+      label:`${reaction.label||`Reaction ${index+1}`} (desorption)`,type:"desorption",
+      reactantsText:hydrated.productsText,productsText:hydrated.reactantsText,
+      parameters:{k_des:desorptionParameter}
+    },index,"desorption");
+    return [hydrated,reverse];
+  });
+}
+
 function hydrateCustomModel(raw) {
   if(!raw||!Array.isArray(raw.species)||!Array.isArray(raw.reactions))throw new Error("That file is not a mechanism-builder model.");
   const invalidPhase=raw.species.find(species=>!["solution","surface"].includes(species.phase||"solution"));
@@ -242,10 +274,7 @@ function hydrateCustomModel(raw) {
     film:rawFilm?{electronic_behavior:rawFilm.electronic_behavior||"insulating",coverage_mode:rawFilm.coverage_mode||"surface_species",
       fixed_coverage:Number(rawFilm.fixed_coverage||0),coverage_species:[...(rawFilm.coverage_species||[])],monolayer_capacity:Number(rawFilm.monolayer_capacity||1e-10)}:null,
     species:raw.species.map(s=>({name:s.name||"Species",phase:s.phase||"solution",charge:Math.trunc(Number(s.charge||0)),initial:Number(s.initial||0),D:s.phase==="surface"?0:Number(s.D||0),fit_D:s.phase==="solution"&&Boolean(s.fit_D),D_lower:Number(s.D_lower||1e-9),D_upper:Number(s.D_upper||1e-3)})),
-    reactions:raw.reactions.map((r,i)=>({label:r.label||`Reaction ${i+1}`,type:r.type||"bulk_mass_action",
-      reactantsText:r.reactantsText??sideToText(r.reactants),productsText:r.productsText??sideToText(r.products),
-      parameters:Object.fromEntries(Object.entries(r.parameters||parametersForType(r.type||"bulk_mass_action")).map(([name,parameter])=>[name,{...(typeof parameter==="number"?{value:parameter}:parameter),fit:Boolean(typeof parameter==="object"&&parameter.fit)}])),formula:r.formula||"",
-      parameterText:r.parameterText||Object.entries(r.parameters||{}).map(([n,p])=>`${n}=${typeof p==="number"?p:p.value}`).join("; "),blockingSpecies:[...(r.blocking_species||[])],interface:r.interface||"bare"}))};
+    reactions:hydrateImportedReactions(raw.reactions)};
   customMechanismRevision+=1;
   renderCustomMechanism();
   if(typeof renderBrowserFitParameters==="function")renderBrowserFitParameters();
@@ -303,7 +332,7 @@ function syncSimulationSolverAvailability() {
   const solver=$("#simulation-solver");
   if(!solver)return;
   const nonlinearSurface=Boolean(customMechanism.film)||customMechanism.reactions.some(reaction=>
-    ["adsorption","electroadsorption","surface_mass_action","custom_surface_rate"].includes(reaction.type));
+    ["adsorption","desorption","electroadsorption","surface_mass_action","custom_surface_rate"].includes(reaction.type));
   for(const value of ["be_fe","trap_ab2"]){
     const option=solver.querySelector(`option[value="${value}"]`);
     option.disabled=nonlinearSurface;
@@ -485,7 +514,7 @@ function renderBuilderSummary(result) {
 
 async function validateBuilder(model=serializeCustomModel()) {
   setBuilderError();
-  try{if(!window.electrochemBrowserEngine?.supportsCustomMechanism(model))throw new Error("The browser supports solution and surface species with homogeneous, electron-transfer, adsorption, electron-transfer adsorption, and heterogeneous rate laws.");const result=await window.electrochemBrowserEngine.validateCustom(model);renderBuilderSummary(result);return result;}
+  try{if(!window.electrochemBrowserEngine?.supportsCustomMechanism(model))throw new Error("The browser supports solution and surface species with homogeneous, electron-transfer, adsorption, desorption, electron-transfer adsorption, and heterogeneous rate laws.");const result=await window.electrochemBrowserEngine.validateCustom(model);renderBuilderSummary(result);return result;}
   catch(error){setBuilderError(error.message);throw error;}
 }
 

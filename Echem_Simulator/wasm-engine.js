@@ -279,7 +279,7 @@
     }
 
     supportsCustomMechanism(model) {
-      const allowedReactions=["bulk_mass_action","custom_bulk_rate","solution_electron","surface_electron","adsorption","electroadsorption","surface_mass_action","custom_surface_rate"];
+      const allowedReactions=["bulk_mass_action","custom_bulk_rate","solution_electron","surface_electron","adsorption","desorption","electroadsorption","surface_mass_action","custom_surface_rate"];
       const film=model?.film;
       const validFilm=!film
         ||(["insulating","ideal_conductor"].includes(film.electronic_behavior)
@@ -300,14 +300,14 @@
       if(payload?.solver==="pnp")return payload.custom_model.species.every(species=>species.phase==="solution")
         &&payload.custom_model.reactions.every(reaction=>["bulk_mass_action","custom_bulk_rate","solution_electron"].includes(reaction.type));
       if(!supportedForwardSolvers.includes(payload?.solver))return false;
-      const nonlinearSurface=Boolean(payload.custom_model.film)||payload.custom_model.reactions.some(reaction=>["adsorption","electroadsorption","surface_mass_action","custom_surface_rate"].includes(reaction.type));
+      const nonlinearSurface=Boolean(payload.custom_model.film)||payload.custom_model.reactions.some(reaction=>["adsorption","desorption","electroadsorption","surface_mass_action","custom_surface_rate"].includes(reaction.type));
       return !nonlinearSurface||["adaptive","adaptive_bdf2","bdf1","bdf2"].includes(payload.solver);
     }
 
     validateCustom(model) {
       if (!this.supportsCustomMechanism(model)) {
         return Promise.reject(new Error(
-          "Browser-native custom mechanisms support up to 12 solution or surface species with homogeneous, electron-transfer, adsorption, electron-transfer adsorption, and heterogeneous rate laws."
+          "Browser-native custom mechanisms support up to 12 solution or surface species with homogeneous, electron-transfer, adsorption, desorption, electron-transfer adsorption, and heterogeneous rate laws."
         ));
       }
       return this.request("validate_custom_mechanism", {custom_model: model});
@@ -330,7 +330,7 @@
         Object.entries(reaction?.parameters || {}).some(([name, parameter]) =>
           parameter?.fit && !(["solution_electron","surface_electron","electroadsorption"].includes(reaction?.type) && name === "n")));
       const nonlinearSurface=Boolean(model?.film)||model?.reactions?.some(reaction=>
-        ["adsorption","electroadsorption","surface_mass_action","custom_surface_rate"].includes(reaction?.type));
+        ["adsorption","desorption","electroadsorption","surface_mass_action","custom_surface_rate"].includes(reaction?.type));
       return payload?.preset === "custom"
         && supportedIntegrators.includes(payload?.solver)
         && this.supportsCustomMechanism(model)
