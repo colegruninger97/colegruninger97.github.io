@@ -300,6 +300,10 @@ main { width: min(1380px, 100%); margin: 0 auto; padding: 27px clamp(22px,3vw,48
 .reaction-arrow { display: grid; place-items: center; height: 36px; color: var(--copper); font: 22px Georgia,serif; }
 .reaction-type-field { margin-top: 11px; }
 .reaction-type-guidance { margin: 9px 3px 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.reaction-interface-field { margin-top: 11px; padding: 10px 12px; border: 1px solid #d8e2df; border-radius: 8px; background: #f4f8f7; }
+.reaction-interface-note { display: grid; gap: 2px; margin-top: 11px; padding: 10px 12px; border: 1px solid #d8e2df; border-radius: 8px; background: #f4f8f7; }
+.reaction-interface-note strong { color: var(--ink); font-size: 11px; }
+.reaction-interface-note span { color: var(--muted); font-size: 10px; }
 .reaction-parameter-prompt { margin: 0; padding: 9px 11px; background: var(--carolina-soft); border-radius: 7px; }
 .builder-parameters { margin-top: 12px; }
 .builder-parameter-head, .builder-parameter-row { display: grid; grid-template-columns: minmax(180px,1.2fr) minmax(130px,.8fr); gap: 8px; align-items: center; }
@@ -319,6 +323,9 @@ main { width: min(1380px, 100%); margin: 0 auto; padding: 27px clamp(22px,3vw,48
 .site-occupant strong { color: var(--ink); font-size: 10px; }
 .site-occupant small { margin-top: 2px; color: var(--muted); font-size: 9px; line-height: 1.35; }
 .site-occupancy-empty { grid-column: 1/-1; margin: 0; }
+.film-settings { display: grid; gap: 12px; margin-top: 13px; padding: 13px; border: 1px solid #d8e2df; border-radius: 9px; background: #f8faf9; }
+.film-settings > .helper-text { margin: 0; }
+.film-capacity-field { max-width: calc(50% - 6px); margin-top: 12px; }
 .custom-rate-grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 10px; }
 .rate-language-help { margin-top: 18px; }
 .rate-language-help > div { padding: 0 13px 12px; color: var(--muted); font-size: 11px; line-height: 1.55; }
@@ -361,6 +368,7 @@ main { width: min(1380px, 100%); margin: 0 auto; padding: 27px clamp(22px,3vw,48
   .builder-species-head, .builder-parameter-head { display: none; }
   .builder-species-row { grid-template-columns: 1fr 1fr; }
   .site-occupant-grid { grid-template-columns: 1fr; }
+  .film-capacity-field { max-width: none; }
   .builder-reaction-title, .builder-equation, .builder-parameter-row, .custom-rate-grid { grid-template-columns: 1fr; }
   .reaction-arrow { height: 20px; transform: rotate(90deg); }
   .equation-list > div { grid-template-columns: 1fr; }

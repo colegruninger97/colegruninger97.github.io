@@ -84,6 +84,22 @@
                 </div>
               </details>
             </section>
+            <section id="builder-film-section" class="setup-editor-section">
+              <div class="section-heading compact"><div><h3>Electrode film</h3><p>Keep surface-site occupancy separate from any optional loss or relocation of electroactive area.</p></div></div>
+              <div class="field-grid"><label class="field"><span>Film behavior</span><select id="builder-film-behavior"><option value="none">No film effect (site occupancy only)</option><option value="insulating">Insulating blocking film</option><option value="ideal_conductor">Ideally conducting film</option></select></label></div>
+              <p id="builder-film-unavailable" class="helper-text">Fixed film coverage is available now. Add a surface-bound species only if film coverage should evolve with its amount.</p>
+              <div id="builder-film-settings" class="film-settings" hidden>
+                <p id="builder-film-conductivity-note" class="helper-text"></p>
+                <div class="field-grid">
+                  <label class="field"><span>Area-coverage source</span><select id="builder-film-coverage-mode"><option value="surface_species">From film-forming surface species</option><option value="fixed">Fixed covered fraction</option></select></label>
+                  <label id="builder-film-fixed-field" class="field"><span>Covered fraction <b>0–1</b></span><input id="builder-film-fixed" type="number" min="0" max="1" step="0.01" value="0"></label>
+                </div>
+                <div id="builder-film-species-fields">
+                  <label class="field film-capacity-field"><span>Monolayer capacity <b>mol cm⁻²</b></span><input id="builder-film-capacity" type="number" min="1e-20" step="any" value="1e-10"></label>
+                  <fieldset class="site-occupancy-field"><legend>Film-forming surface species</legend><p>The selected coverages are summed only to calculate covered electrode area. This does not change their adsorption-site pools.</p><div id="builder-film-species" class="site-occupant-grid"></div></fieldset>
+                </div>
+              </div>
+            </section>
             <section class="setup-editor-section transport-editor">
               <div class="section-heading compact"><div><h3>Transport</h3><p>Use supported-electrolyte diffusion for routine work or solve migration and diffuse charge explicitly with PNP.</p></div></div>
               <div class="field-grid"><label class="field"><span>Transport model</span><select id="builder-transport"><option value="standard">Supported electrolyte (selected integrator)</option><option value="pnp">Poisson–Nernst–Planck (fully implicit)</option></select></label></div>
@@ -114,7 +130,12 @@
           <details class="advanced-settings">
             <summary>Numerical settings</summary>
             <div class="field-grid inset">
-              <div id="time-integrator-field" class="automatic-resolution"><strong>Adaptive fully implicit solver</strong><p>EchemLab estimates local error, accepts or retries each timestep, and grows the step again when the response becomes smooth. It also checks a finer near-electrode grid and refines the mesh when necessary.</p><span id="numerical-resolution-status">Adaptation begins when the simulation starts.</span></div>
+              <div id="time-integrator-field" class="automatic-resolution">
+                <label class="field"><span>Time integrator</span><select id="simulation-solver"><option value="bdf2" selected>Fixed-step fully implicit BDF2 (recommended)</option><option value="adaptive_bdf2">Adaptive fully implicit BDF2 (optional accuracy check)</option><option value="bdf1">Best-effort fully implicit BDF1 — extreme rates</option><option value="adaptive">Adaptive fully implicit BDF1</option><option value="be_fe">Fixed-step BE/FE (semi-implicit)</option><option value="trap_ab2">Fixed-step TRAP/AB2 (semi-implicit)</option></select></label>
+                <p id="simulation-solver-note">Uses automatic fixed resolution with second-order fully implicit stepping after a BDF1 startup step. EchemLab reports the change relative to a calculation using half as many steps and spatial intervals.</p>
+                <span id="numerical-resolution-status">Adaptation begins when the simulation starts.</span>
+                <p id="initial-transient-note" class="model-warning" hidden></p>
+              </div>
             </div>
           </details>
 
