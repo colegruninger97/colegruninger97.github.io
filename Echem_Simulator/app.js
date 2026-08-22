@@ -53,6 +53,14 @@ const voltammogramConventions = Object.freeze({
     note: "IUPAC convention: anodic current is positive and more positive potentials appear to the right."
   })
 });
+const simulationSolverNotes = Object.freeze({
+  adaptive: "Starts with a small step for fast chemistry, estimates local error by step doubling, and grows the step when the transient relaxes. The browser limit is 12,000 accepted steps per grid solve.",
+  adaptive_bdf2: "Uses variable-step, fully implicit second-order BDF2 with an embedded BDF1 error estimate. It restarts safely with BDF1 at the switching potential and may use up to 12,000 accepted steps per grid solve.",
+  bdf1: "Best-effort first-order fully implicit stepping for rates beyond the adaptive resolution budget. EchemLab compares the result with a calculation using half as many steps and spatial intervals so the visible numerical sensitivity is reported.",
+  bdf2: "Uses automatic fixed resolution with second-order fully implicit stepping after a BDF1 startup step. EchemLab reports the change relative to a calculation using half as many steps and spatial intervals.",
+  be_fe: "Backward Euler diffusion with forward-Euler homogeneous chemistry. Fast reactions can violate its explicit reaction-step stability limit.",
+  trap_ab2: "Trapezoidal diffusion with Adams–Bashforth homogeneous chemistry. Efficient for smooth nonstiff kinetics, but not recommended for very fast reactions."
+});
 let latestResult = null;
 let currentPreset = "solution_e";
 let voltammogramConvention = "us";
@@ -106,6 +114,11 @@ function payloadFromForm() {
     payload[input.dataset.key] = input.tagName === "SELECT" ? input.value : Number(input.value);
   });
   return payload;
+}
+
+function syncSimulationSolverNote() {
+  const solver=$("#simulation-solver").value;
+  $("#simulation-solver-note").textContent=simulationSolverNotes[solver]||simulationSolverNotes.bdf2;
 }
 
 function setLoading(loading) {
@@ -250,12 +263,40 @@ function displayResult(result, simulationInput = null) {
   if(Number.isFinite(diffusion)&&diffusion>0)$("#electrolyte-diffusion").value=String(diffusion);
   if(result.resolution){
     const retries=Number(result.resolution.rejected_steps||0),refinements=Number(result.resolution.grid_refinements||0);
-    $("#numerical-resolution-status").textContent=`Accepted ${Number(result.resolution.timesteps).toLocaleString()} adaptive steps${retries?` after ${retries.toLocaleString()} retries`:""}; used ${result.resolution.grid_points} surface-refined intervals${refinements?` after ${refinements} mesh refinement${refinements===1?"":"s"}`:""}.`;
+    if(result.resolution.adaptive){
+      $("#numerical-resolution-status").textContent=`Accepted ${Number(result.resolution.timesteps).toLocaleString()} adaptive steps${retries?` after ${retries.toLocaleString()} retries`:""}; used ${result.resolution.grid_points} surface-refined intervals${refinements?` after ${refinements} mesh refinement${refinements===1?"":"s"}`:""}.`;
+    }else{
+      const limited=result.resolution.timestep_limited_by_budget||result.resolution.grid_limited_by_budget;
+      const rrms=Number(result.resolution.refinement_relative_rms),peakDifference=Number(result.resolution.refinement_peak_relative_difference);
+      const percent=value=>{const scaled=100*value;return scaled<0.01?`${scaled.toExponential(2)}%`:`${scaled.toPrecision(3)}%`;};
+      const comparison=Number.isFinite(rrms)&&Number.isFinite(peakDifference)?` A half-resolution comparison changed the trace by ${percent(rrms)} relative RMS and the peak magnitude by ${percent(peakDifference)}.`:"";
+      $("#numerical-resolution-status").textContent=`Used ${Number(result.resolution.timesteps).toLocaleString()} fixed steps and ${result.resolution.grid_points} surface-refined intervals.${limited?" The browser resolution budget was reached, so this is a best-effort result.":""}${comparison}`;
+    }
   }
+  renderInitialTransientNote(result,simulationInput);
+}
+
+function renderInitialTransientNote(result,simulationInput) {
+  const note=$("#initial-transient-note"),current=result?.series?.[0]?.current||[],time=result?.time||[];
+  const messages=[];
+  if(result?.resolution?.adaptive&&current.length>=20&&time.length===current.length){
+    const skip=Math.min(10,Math.max(3,Math.floor(current.length*0.01)));
+    const initialPeak=current.slice(0,skip).reduce((peak,value)=>Math.max(peak,Math.abs(value)),0);
+    const laterPeak=current.slice(skip).reduce((peak,value)=>Math.max(peak,Math.abs(value)),0);
+    const totalTime=Number(time.at(-1)||0);
+    if(initialPeak>1.1*laterPeak&&Number(time[0])<totalTime*1e-4)messages.push("Initial-condition transient: the starting species amounts do not exactly satisfy electrode equilibrium at Ei, and the adaptive solver is resolving the rapid relaxation. This is not a timestep instability. Move Ei farther from the redox wave or choose starting oxidation states and surface coverages consistent with Ei if the experiment was equilibrated before the scan.");
+  }
+  if(Number(simulationInput?.double_layer_capacitance)>0)messages.push("Ideal-waveform charging: the triangular scan changes slope instantaneously at the start and switching potential, so an ideal double-layer capacitor produces a current step there. Finite uncompensated resistance smooths that step through the RC response.");
+  note.textContent=messages.join(" ");note.hidden=!messages.length;
 }
 
 function updateComparisonMetric(){
   if(!latestResult){$("#enhancement").textContent="—";return;}
+  if(latestResult.film_coverage?.length){
+    $("#enhancement-label").textContent="Final film area coverage";
+    $("#enhancement").textContent=`${(100*Number(latestResult.film_coverage.at(-1)||0)).toPrecision(4)}%`;
+    return;
+  }
   if(latestResult.surface_coverages?.length){
     const total=latestResult.surface_coverages.reduce((sum,trace)=>sum+Number(trace.coverage.at(-1)||0),0);
     $("#enhancement-label").textContent="Final surface coverage";
@@ -296,6 +337,7 @@ function clearSavedTraces(){savedTraces=[];renderSavedTraces();if(latestResult)d
 
 async function runSimulation() {
   clearError(); setLoading(true);
+  $("#initial-transient-note").hidden=true;
   $("#numerical-resolution-status").textContent="Selecting resolution for this mechanism…";
   try {
     if (!window.electrochemBrowserEngine) {
@@ -303,7 +345,7 @@ async function runSimulation() {
     }
     const model=serializeCustomModel();
     await validateBuilder(model);
-    const payload={...payloadFromForm(),preset:"custom",solver:"bdf1",custom_model:model};
+    const payload={...payloadFromForm(),preset:"custom",solver:$("#simulation-solver").value,custom_model:model};
     if($("#builder-transport").value==="pnp"){
       payload.solver="pnp";
       payload.pnp_stern_capacitance=Number($("#builder-pnp-stern").value);
@@ -369,11 +411,12 @@ function downloadCSV() {
   if (!latestResult) return;
   const convention=activeVoltammogramConvention();
   const coverages=latestResult.surface_coverages||[];
+  const filmCoverage=latestResult.film_coverage||[];
   const pnpFields=latestResult.concentrations||[];
   const pnpHeaders=latestResult.debye_length?[`faradaic_current_A_${convention.filename}`,`charging_current_A_${convention.filename}`,"surface_solution_potential_V",...pnpFields.map(field=>`${field.name.replaceAll(" ","_")}_at_electrode_M`)]:[];
-  const headers = ["time_s","potential_V",...latestResult.series.map(s => `${s.name.replaceAll(" ","_")}_A_${convention.filename}`),...coverages.map(trace=>`${trace.name.replaceAll(" ","_")}_mol_cm-2`),...pnpHeaders];
+  const headers = ["time_s","potential_V",...latestResult.series.map(s => `${s.name.replaceAll(" ","_")}_A_${convention.filename}`),...coverages.map(trace=>`${trace.name.replaceAll(" ","_")}_mol_cm-2`),...(filmCoverage.length?["film_area_coverage_fraction"]:[]),...pnpHeaders];
   const rows = [headers.join(",")];
-  for (let i=0;i<latestResult.points;i++) rows.push([latestResult.time[i],latestResult.potential[i],...latestResult.series.map(s=>displayedCurrent(s.current[i])),...coverages.map(trace=>trace.coverage[i]),...(latestResult.debye_length?[displayedCurrent(latestResult.faradaic_current[i]),displayedCurrent(latestResult.charging_current[i]),latestResult.solution_potential[i+1][0],...pnpFields.map(field=>field.values[i+1][0])]:[])].join(","));
+  for (let i=0;i<latestResult.points;i++) rows.push([latestResult.time[i],latestResult.potential[i],...latestResult.series.map(s=>displayedCurrent(s.current[i])),...coverages.map(trace=>trace.coverage[i]),...(filmCoverage.length?[filmCoverage[i]]:[]),...(latestResult.debye_length?[displayedCurrent(latestResult.faradaic_current[i]),displayedCurrent(latestResult.charging_current[i]),latestResult.solution_potential[i+1][0],...pnpFields.map(field=>field.values[i+1][0])]:[])].join(","));
   const blob = new Blob([rows.join("\n")], {type:"text/csv"});
   const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `${latestResult.preset}_voltammogram_${convention.filename}.csv`; link.click();
   URL.revokeObjectURL(link.href);
@@ -394,6 +437,7 @@ $$('[data-view-target]').forEach(button => {
   button.addEventListener("click", () => switchView(button.dataset.viewTarget));
 });
 $("#preset-select").addEventListener("change",event=>selectPreset(event.target.value));
+$("#simulation-solver").addEventListener("change",syncSimulationSolverNote);
 $("#run-button").addEventListener("click", runSimulation);
 $("#save-trace-button").addEventListener("click",saveCurrentTrace);
 $("#show-saved-traces").addEventListener("change",()=>latestResult&&drawChart(latestResult));
@@ -404,3 +448,4 @@ $("#electrolyte-check-button").addEventListener("click",screenSupportingElectrol
 $("#reset-button").addEventListener("click", () => { location.reload(); });
 window.addEventListener("resize", () => latestResult && drawChart(latestResult));
 checkEngine();
+syncSimulationSolverNote();

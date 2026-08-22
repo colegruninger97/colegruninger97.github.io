@@ -49,6 +49,7 @@ function parametersForType(type) {
 function defaultCustomMechanism() {
   return {
     name:"Solution EC mechanism",
+    film:null,
     species:[
       {name:"Ox",phase:"solution",charge:0,initial:1e-3,D:1e-5,fit_D:false,D_lower:1e-9,D_upper:1e-3},
       {name:"Red",phase:"solution",charge:0,initial:0,D:1e-5,fit_D:false,D_lower:1e-9,D_upper:1e-3},
@@ -64,6 +65,7 @@ function defaultCustomMechanism() {
 function defaultPnpMechanism() {
   return {
     name:"Charged redox couple with supporting electrolyte",
+    film:null,
     species:[
       {name:"OxPlus",phase:"solution",charge:1,initial:1e-3,D:1e-5,fit_D:false,D_lower:1e-9,D_upper:1e-3},
       {name:"Red",phase:"solution",charge:0,initial:0,D:1e-5,fit_D:false,D_lower:1e-9,D_upper:1e-3},
@@ -112,6 +114,16 @@ function siteOccupants(reaction) {
   const selected=Array.isArray(reaction.blockingSpecies)?reaction.blockingSpecies:[];
   const names=[...surfaceProducts(reaction),...selected];
   return [...new Set(names)].filter(name=>customMechanism.species.some(species=>species.name===name&&species.phase==="surface"));
+}
+
+function isFaradaicReaction(reaction) {
+  return ["solution_electron","surface_electron","electroadsorption"].includes(reaction?.type);
+}
+
+function defaultFilm() {
+  const firstSurface=customMechanism.species.find(species=>species.phase==="surface");
+  return {electronic_behavior:"insulating",coverage_mode:firstSurface?"surface_species":"fixed",
+    fixed_coverage:0,coverage_species:firstSurface?[firstSurface.name]:[],monolayer_capacity:1e-10};
 }
 
 function reactionEditorReadiness() {
@@ -200,9 +212,23 @@ function serializeCustomModel() {
       reactants:parseReactionSide(r.reactantsText),products:parseReactionSide(r.productsText),
       parameters:custom?structuredClone(syncCustomParameters(r)):structuredClone(r.parameters),
       formula:custom?String(r.formula||"").trim():"",
-      blocking_species:["adsorption","electroadsorption"].includes(r.type)?siteOccupants(r):[]};
+      blocking_species:["adsorption","electroadsorption"].includes(r.type)?siteOccupants(r):[],
+      interface:isFaradaicReaction(r)?String(r.interface||"bare"):"bare"};
   });
-  return {name:customMechanism.name||"Custom mechanism",species,reactions};
+  let film=null;
+  if(customMechanism.film){
+    film=structuredClone(customMechanism.film);
+    if(!["insulating","ideal_conductor"].includes(film.electronic_behavior))throw new Error("Choose whether the film is insulating or ideally conducting.");
+    if(!["fixed","surface_species"].includes(film.coverage_mode))throw new Error("Choose how the film area coverage is defined.");
+    if(film.coverage_mode==="fixed"&&(!Number.isFinite(Number(film.fixed_coverage))||Number(film.fixed_coverage)<0||Number(film.fixed_coverage)>1))throw new Error("Fixed film coverage must lie between 0 and 1.");
+    if(film.coverage_mode==="surface_species"){
+      film.coverage_species=[...new Set(film.coverage_species||[])].filter(name=>species.some(item=>item.phase==="surface"&&item.name===name));
+      if(!film.coverage_species.length)throw new Error("Select at least one film-forming surface species.");
+      if(!Number.isFinite(Number(film.monolayer_capacity))||Number(film.monolayer_capacity)<=0)throw new Error("Film monolayer capacity must be greater than zero.");
+    }
+    if(film.electronic_behavior==="insulating"&&reactions.some(reaction=>reaction.interface==="film"))throw new Error("An insulating film cannot host electron transfer. Assign those reactions to the bare electrode or choose an ideally conducting film.");
+  }else reactions.forEach(reaction=>{reaction.interface="bare";});
+  return {name:customMechanism.name||"Custom mechanism",species,reactions,film};
 }
 
 function hydrateCustomModel(raw) {
@@ -211,12 +237,15 @@ function hydrateCustomModel(raw) {
   if(invalidPhase)throw new Error(`Species “${invalidPhase.name||"unnamed"}” has an unsupported phase.`);
   const unsupportedReaction=raw.reactions.find(reaction=>!Object.prototype.hasOwnProperty.call(reactionTypeLabels,reaction.type||"bulk_mass_action"));
   if(unsupportedReaction)throw new Error(`Reaction “${unsupportedReaction.label||"unnamed"}” uses an unsupported surface reaction type.`);
+  const rawFilm=raw.film||null;
   customMechanism={name:raw.name||"Imported mechanism",
+    film:rawFilm?{electronic_behavior:rawFilm.electronic_behavior||"insulating",coverage_mode:rawFilm.coverage_mode||"surface_species",
+      fixed_coverage:Number(rawFilm.fixed_coverage||0),coverage_species:[...(rawFilm.coverage_species||[])],monolayer_capacity:Number(rawFilm.monolayer_capacity||1e-10)}:null,
     species:raw.species.map(s=>({name:s.name||"Species",phase:s.phase||"solution",charge:Math.trunc(Number(s.charge||0)),initial:Number(s.initial||0),D:s.phase==="surface"?0:Number(s.D||0),fit_D:s.phase==="solution"&&Boolean(s.fit_D),D_lower:Number(s.D_lower||1e-9),D_upper:Number(s.D_upper||1e-3)})),
     reactions:raw.reactions.map((r,i)=>({label:r.label||`Reaction ${i+1}`,type:r.type||"bulk_mass_action",
       reactantsText:r.reactantsText??sideToText(r.reactants),productsText:r.productsText??sideToText(r.products),
       parameters:Object.fromEntries(Object.entries(r.parameters||parametersForType(r.type||"bulk_mass_action")).map(([name,parameter])=>[name,{...(typeof parameter==="number"?{value:parameter}:parameter),fit:Boolean(typeof parameter==="object"&&parameter.fit)}])),formula:r.formula||"",
-      parameterText:r.parameterText||Object.entries(r.parameters||{}).map(([n,p])=>`${n}=${typeof p==="number"?p:p.value}`).join("; "),blockingSpecies:[...(r.blocking_species||[])]}))};
+      parameterText:r.parameterText||Object.entries(r.parameters||{}).map(([n,p])=>`${n}=${typeof p==="number"?p:p.value}`).join("; "),blockingSpecies:[...(r.blocking_species||[])],interface:r.interface||"bare"}))};
   customMechanismRevision+=1;
   renderCustomMechanism();
   if(typeof renderBrowserFitParameters==="function")renderBrowserFitParameters();
@@ -239,6 +268,7 @@ const pnpReactionTypes=new Set(["bulk_mass_action","solution_electron","custom_b
 
 function pnpCompatibilityIssue() {
   if(customMechanism.species.some(species=>!["solution","surface"].includes(species.phase)))return "Choose a phase for every species before selecting PNP.";
+  if(customMechanism.film)return "PNP is unavailable while an electrode film is enabled.";
   if(customMechanism.species.some(species=>species.phase==="surface"))return "PNP is unavailable while the setup contains surface species.";
   if(customMechanism.reactions.some(reaction=>!pnpReactionTypes.has(reaction.type)))return "PNP is unavailable while the setup contains surface-only reactions.";
   return "";
@@ -269,9 +299,53 @@ function syncTransportControls() {
   $$('[data-builder-reaction-type] option').forEach(option=>{option.disabled=pnp&&!pnpReactionTypes.has(option.value);});
 }
 
+function syncSimulationSolverAvailability() {
+  const solver=$("#simulation-solver");
+  if(!solver)return;
+  const nonlinearSurface=Boolean(customMechanism.film)||customMechanism.reactions.some(reaction=>
+    ["adsorption","electroadsorption","surface_mass_action","custom_surface_rate"].includes(reaction.type));
+  for(const value of ["be_fe","trap_ab2"]){
+    const option=solver.querySelector(`option[value="${value}"]`);
+    option.disabled=nonlinearSurface;
+    option.title=nonlinearSurface?"This surface model requires a fully implicit solver.":"";
+  }
+  if(nonlinearSurface&&["be_fe","trap_ab2"].includes(solver.value))solver.value="bdf2";
+  if(typeof syncSimulationSolverNote==="function")syncSimulationSolverNote();
+}
+
 function setBuilderTransport(transport) {
   $("#builder-transport").value=transport==="pnp"?"pnp":"standard";
   syncTransportControls();
+}
+
+function renderFilmControls() {
+  const surfaceSpecies=customMechanism.species.filter(species=>species.phase==="surface");
+  if(customMechanism.film&&!surfaceSpecies.length&&customMechanism.film.coverage_mode==="surface_species")customMechanism.film.coverage_mode="fixed";
+  const behavior=$("#builder-film-behavior");
+  behavior.value=customMechanism.film?.electronic_behavior||"none";
+  const coverageMode=$("#builder-film-coverage-mode");
+  coverageMode.querySelector('option[value="surface_species"]').disabled=!surfaceSpecies.length;
+  const unavailable=$("#builder-film-unavailable");
+  unavailable.hidden=Boolean(surfaceSpecies.length);
+  const enabled=Boolean(customMechanism.film);
+  setControlGroupState("#builder-film-settings",enabled);
+  if(!enabled)return;
+  const film=customMechanism.film;
+  coverageMode.value=film.coverage_mode;
+  const fixed=film.coverage_mode==="fixed";
+  setControlGroupState("#builder-film-fixed-field",fixed);
+  setControlGroupState("#builder-film-species-fields",!fixed&&surfaceSpecies.length>0);
+  $("#builder-film-fixed").value=film.fixed_coverage;
+  $("#builder-film-capacity").value=film.monolayer_capacity;
+  const selected=new Set(film.coverage_species||[]);
+  $("#builder-film-species").innerHTML=surfaceSpecies.map(species=>`<label class="site-occupant"><input type="checkbox" data-builder-film-species value="${escapeHTML(species.name)}" ${selected.has(species.name)?"checked":""}><span><strong>${escapeHTML(species.name)}</strong><small>Contributes to film area coverage</small></span></label>`).join("");
+  $$('[data-builder-film-species]').forEach(input=>input.addEventListener("change",()=>{
+    film.coverage_species=$$('[data-builder-film-species]:checked').map(checkbox=>checkbox.value);
+    markMechanismChanged();renderBuilderReactions();
+  }));
+  $("#builder-film-conductivity-note").textContent=film.electronic_behavior==="ideal_conductor"
+    ? "Electron-transfer steps can be assigned independently to the exposed metal or to the film/solution interface."
+    : "The covered area is inactive for electron transfer; all electron-transfer steps remain on the exposed metal.";
 }
 
 function renderBuilderSpecies() {
@@ -285,8 +359,9 @@ function renderBuilderSpecies() {
   </div>`).join("");
   $$('[data-builder-species-key]').forEach(input=>input.addEventListener("change",()=>{
     const species=customMechanism.species[+input.dataset.builderSpecies],key=input.dataset.builderSpeciesKey;
-    const previousPhase=species.phase;
+    const previousPhase=species.phase,previousName=species.name;
     species[key]=key==="name"||key==="phase"?input.value:+input.value;
+    if(key==="name"&&customMechanism.film)customMechanism.film.coverage_species=(customMechanism.film.coverage_species||[]).map(name=>name===previousName?species.name:name);
     if(key==="phase"&&species.phase!==previousPhase){
       species.initial=0;
       species.D=species.phase==="solution"?1e-5:0;
@@ -296,7 +371,8 @@ function renderBuilderSpecies() {
     renderBuilderSpecies();
     if(key==="name"||key==="phase"||key==="initial")renderBuilderReactions();
   }));
-  $$('[data-builder-remove-species]').forEach(button=>button.addEventListener("click",()=>{customMechanism.species.splice(+button.dataset.builderRemoveSpecies,1);markMechanismChanged();renderBuilderSpecies();renderBuilderReactions();}));
+  $$('[data-builder-remove-species]').forEach(button=>button.addEventListener("click",()=>{const removed=customMechanism.species.splice(+button.dataset.builderRemoveSpecies,1)[0];if(customMechanism.film)customMechanism.film.coverage_species=(customMechanism.film.coverage_species||[]).filter(name=>name!==removed?.name);markMechanismChanged();renderBuilderSpecies();renderBuilderReactions();}));
+  renderFilmControls();
   syncTransportControls();
 }
 
@@ -327,6 +403,13 @@ function parameterRows(reaction,index) {
     Object.entries(reaction.parameters).map(([name,p])=>`<div class="builder-parameter-row"><span><strong>${escapeHTML(name)}</strong><small>${escapeHTML(reactionParameterMeta[reaction.type]?.[name]?.[5]||"")}</small></span><input aria-label="${name} simulation value" data-builder-param="${index}" data-builder-param-name="${name}" data-builder-param-key="value" type="number" step="any" value="${p.value}"></div>`).join("")+occupancy;
 }
 
+function reactionInterfaceRow(reaction,index) {
+  if(!isFaradaicReaction(reaction)||!customMechanism.film)return "";
+  if(customMechanism.film.electronic_behavior==="insulating")return `<div class="reaction-interface-note"><strong>Exposed metal interface</strong><span>The film-covered fraction is electronically inactive for this step.</span></div>`;
+  const current=["bare","film"].includes(reaction.interface)?reaction.interface:"bare";
+  return `<label class="field reaction-interface-field"><span>Electron-transfer interface</span><select data-builder-reaction-interface="${index}"><option value="bare" ${current==="bare"?"selected":""}>Exposed metal</option><option value="film" ${current==="film"?"selected":""}>Film / solution</option></select></label>`;
+}
+
 function renderBuilderReactions() {
   const readiness=reactionEditorReadiness();
   const availability=$("#builder-reaction-availability");
@@ -335,27 +418,31 @@ function renderBuilderReactions() {
   $("#builder-reactions").hidden=Boolean(readiness);
   $("#builder-add-reaction").hidden=Boolean(readiness);
   $("#rate-language-help").hidden=Boolean(readiness);
-  if(readiness){$("#builder-reactions").innerHTML="";syncTransportControls();return;}
+  if(readiness){$("#builder-reactions").innerHTML="";syncTransportControls();syncSimulationSolverAvailability();return;}
   $("#builder-reactions").innerHTML=customMechanism.reactions.map((r,i)=>{
     const state=prepareReactionType(r);
     const placeholder=!state.compatible?"Choose a new compatible reaction type":state.types.length?"Choose a compatible reaction type":"Enter valid participants first";
     const options=state.types.map(value=>`<option value="${value}" ${state.compatible&&r.type===value?"selected":""}>${reactionTypeLabels[value]}</option>`).join("");
     const parameters=state.compatible?parameterRows(r,i):`<p class="helper-text reaction-parameter-prompt">Choose a compatible reaction type before editing kinetic parameters.</p>`;
+    const reactionInterface=state.compatible?reactionInterfaceRow(r,i):"";
     return `<article class="builder-reaction-card">
     <div class="builder-reaction-title"><input aria-label="Reaction label" data-builder-reaction="${i}" data-builder-reaction-key="label" value="${escapeHTML(r.label)}"><button class="remove-dataset" data-builder-remove-reaction="${i}" type="button" aria-label="Remove reaction">×</button></div>
     <div class="builder-equation"><label class="field"><span>Reactants</span><input data-builder-reaction="${i}" data-builder-reaction-key="reactantsText" value="${escapeHTML(r.reactantsText)}" placeholder="A + 2 B"></label><span class="reaction-arrow">→</span><label class="field"><span>Products</span><input data-builder-reaction="${i}" data-builder-reaction-key="productsText" value="${escapeHTML(r.productsText)}" placeholder="C"></label></div>
     <label class="field reaction-type-field"><span>Compatible reaction type</span><select aria-label="Reaction type" aria-describedby="builder-reaction-guidance-${i}" data-builder-reaction-type="${i}" ${state.types.length?"":"disabled"}><option value="" ${state.compatible&&r.type?"":"selected"}>${placeholder}</option>${options}</select></label>
     <p id="builder-reaction-guidance-${i}" class="reaction-type-guidance">${escapeHTML(state.guidance)}</p>
+    ${reactionInterface}
     <div class="builder-parameters">${parameters}</div>
   </article>`;}).join("");
   $$('[data-builder-reaction-key]').forEach(input=>input.addEventListener("input",()=>{customMechanism.reactions[+input.dataset.builderReaction][input.dataset.builderReactionKey]=input.value;markMechanismChanged();}));
   $$('[data-builder-reaction-key="reactantsText"], [data-builder-reaction-key="productsText"]').forEach(input=>input.addEventListener("change",renderBuilderReactions));
-  $$('[data-builder-reaction-type]').forEach(select=>select.addEventListener("change",()=>{const r=customMechanism.reactions[+select.dataset.builderReactionType];r.type=select.value;r.formula=select.value.startsWith("custom_")?"k*"+(customMechanism.species[0]?.name||"A"):"";r.parameterText=select.value.startsWith("custom_")?"k=1":"";r.parameters=select.value.startsWith("custom_")?inferCustomParameters(r.parameterText):parametersForType(select.value);r.blockingSpecies=[];markMechanismChanged();renderBuilderReactions();}));
-  $$('[data-builder-param]').forEach(input=>input.addEventListener("change",()=>{const reaction=customMechanism.reactions[+input.dataset.builderParam],p=reaction.parameters[input.dataset.builderParamName];p[input.dataset.builderParamKey]=+input.value;markMechanismChanged();}));
+  $$('[data-builder-reaction-type]').forEach(select=>select.addEventListener("change",()=>{const r=customMechanism.reactions[+select.dataset.builderReactionType];r.type=select.value;r.formula=select.value.startsWith("custom_")?"k*"+(customMechanism.species[0]?.name||"A"):"";r.parameterText=select.value.startsWith("custom_")?"k=1":"";r.parameters=select.value.startsWith("custom_")?inferCustomParameters(r.parameterText):parametersForType(select.value);r.blockingSpecies=[];r.interface="bare";markMechanismChanged();renderBuilderReactions();}));
+  $$('[data-builder-reaction-interface]').forEach(select=>select.addEventListener("change",()=>{customMechanism.reactions[+select.dataset.builderReactionInterface].interface=select.value;markMechanismChanged();}));
+  $$('[data-builder-param]').forEach(input=>input.addEventListener("input",()=>{const reaction=customMechanism.reactions[+input.dataset.builderParam],p=reaction.parameters[input.dataset.builderParamName];p[input.dataset.builderParamKey]=+input.value;markMechanismChanged();}));
   $$('[data-builder-site-occupant]').forEach(input=>input.addEventListener("change",()=>{const index=+input.dataset.builderSiteOccupant;customMechanism.reactions[index].blockingSpecies=$$(`[data-builder-site-occupant="${index}"]:checked`).map(checkbox=>checkbox.value);markMechanismChanged();}));
   $$('[data-builder-reaction-key="parameterText"]').forEach(input=>input.addEventListener("change",()=>{const reaction=customMechanism.reactions[+input.dataset.builderReaction];syncCustomParameters(reaction);markMechanismChanged();renderBuilderReactions();}));
   $$('[data-builder-remove-reaction]').forEach(button=>button.addEventListener("click",()=>{customMechanism.reactions.splice(+button.dataset.builderRemoveReaction,1);markMechanismChanged();renderBuilderReactions();}));
   syncTransportControls();
+  syncSimulationSolverAvailability();
 }
 
 function renderCustomMechanism() {
@@ -392,7 +479,7 @@ function setBuilderError(message=""){const box=$("#builder-error");box.textConte
 
 function renderBuilderSummary(result) {
   $("#builder-summary").className="builder-summary validated-summary";
-  $("#builder-summary").innerHTML=`<div class="result-badges"><span class="result-badge success">Valid reaction setup</span><span class="result-badge">${result.species_count} species</span><span class="result-badge">${result.reaction_count} reactions</span><span class="result-badge">Rust/Wasm simulation ready</span></div>${result.warning?`<div class="model-warning">${escapeHTML(result.warning)}</div>`:""}<div class="equation-list">${result.equations.map(e=>`<div><span class="candidate-kind">${escapeHTML(e.type.replaceAll("_"," "))}</span><strong>${escapeHTML(e.equation)}</strong><small>${escapeHTML(e.label)}</small></div>`).join("")}</div>`;
+  $("#builder-summary").innerHTML=`<div class="result-badges"><span class="result-badge success">Valid reaction setup</span><span class="result-badge">${result.species_count} species</span><span class="result-badge">${result.reaction_count} reactions</span>${result.film?`<span class="result-badge">${escapeHTML(result.film)}</span>`:""}<span class="result-badge">Rust/Wasm simulation ready</span></div>${result.warning?`<div class="model-warning">${escapeHTML(result.warning)}</div>`:""}<div class="equation-list">${result.equations.map(e=>`<div><span class="candidate-kind">${escapeHTML(e.type.replaceAll("_"," "))}</span><strong>${escapeHTML(e.equation)}</strong><small>${escapeHTML(e.label)}${e.interface?` · ${e.interface==="film"?"film / solution interface":"exposed metal interface"}`:""}</small></div>`).join("")}</div>`;
   $("#mechanism-equation").textContent=result.equations.map(e=>e.equation).join("  ·  ");
 }
 
@@ -411,4 +498,16 @@ $("#builder-export-button").addEventListener("click",exportBuilder);
 $("#builder-import-button").addEventListener("click",()=>$("#builder-import-file").click());
 $("#builder-import-file").addEventListener("change",async event=>{try{setBuilderTransport("standard");hydrateCustomModel(JSON.parse(await event.target.files[0].text()));markMechanismChanged();await validateBuilder();}catch(error){setBuilderError(error.message);}finally{event.target.value="";}});
 $("#builder-transport").addEventListener("change",event=>{setBuilderTransport(event.target.value);markMechanismChanged();});
+$("#builder-film-behavior").addEventListener("change",event=>{
+  if(event.target.value==="none")customMechanism.film=null;
+  else{
+    customMechanism.film=customMechanism.film||defaultFilm();
+    customMechanism.film.electronic_behavior=event.target.value;
+    if(event.target.value==="insulating")customMechanism.reactions.forEach(reaction=>{reaction.interface="bare";});
+  }
+  markMechanismChanged();renderFilmControls();renderBuilderReactions();syncTransportControls();
+});
+$("#builder-film-coverage-mode").addEventListener("change",event=>{customMechanism.film.coverage_mode=event.target.value;if(event.target.value==="surface_species"&&!customMechanism.film.coverage_species.length){const first=customMechanism.species.find(species=>species.phase==="surface");if(first)customMechanism.film.coverage_species=[first.name];}markMechanismChanged();renderFilmControls();});
+$("#builder-film-fixed").addEventListener("input",event=>{customMechanism.film.fixed_coverage=Number(event.target.value);markMechanismChanged();});
+$("#builder-film-capacity").addEventListener("input",event=>{customMechanism.film.monolayer_capacity=Number(event.target.value);markMechanismChanged();});
 selectPreset(currentPreset);

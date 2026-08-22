@@ -3,6 +3,7 @@
 
   const scriptBase = new URL(".", document.currentScript.src);
   const supportedIntegrators = ["be_fe", "trap_ab2", "bdf1", "bdf2"];
+  const supportedForwardSolvers = ["adaptive", "adaptive_bdf2", ...supportedIntegrators];
 
   class ElectrochemBrowserEngine {
     constructor() {
@@ -229,7 +230,7 @@
     }
 
     supportsSimulation(payload) {
-      if (!supportedIntegrators.includes(payload?.solver)) return false;
+      if (!supportedForwardSolvers.includes(payload?.solver)) return false;
       if (payload?.preset === "solution_e") return true;
       return this.presetModel(payload) !== null;
     }
@@ -237,10 +238,10 @@
     simulate(payload) {
       if (!this.supportsSimulation(payload)) {
         return Promise.reject(new Error(
-          "Choose BE/FE, TRAP/AB2, BDF1, or BDF2 for a solution mechanism."
+          "Choose adaptive BDF1/BDF2, fixed BDF1/BDF2, BE/FE, or TRAP/AB2 for a solution mechanism."
         ));
       }
-      if (payload.preset === "solution_e") {
+      if (payload.preset === "solution_e" && !["adaptive", "adaptive_bdf2"].includes(payload.solver)) {
         return this.request("simulate_solution_e", payload);
       }
       const preset = payload.preset;
@@ -279,22 +280,28 @@
 
     supportsCustomMechanism(model) {
       const allowedReactions=["bulk_mass_action","custom_bulk_rate","solution_electron","surface_electron","adsorption","electroadsorption","surface_mass_action","custom_surface_rate"];
+      const film=model?.film;
+      const validFilm=!film
+        ||(["insulating","ideal_conductor"].includes(film.electronic_behavior)
+          &&["fixed","surface_species"].includes(film.coverage_mode));
       return Array.isArray(model?.species)
         && model.species.length > 0
         && model.species.length <= 12
         && model.species.every(species => ["solution","surface"].includes(species?.phase))
         && Array.isArray(model?.reactions)
         && model.reactions.length > 0
-        && model.reactions.every(reaction => allowedReactions.includes(reaction?.type));
+        && model.reactions.every(reaction => allowedReactions.includes(reaction?.type)
+          &&["bare","film"].includes(reaction?.interface||"bare"))
+        &&validFilm;
     }
 
     supportsCustomSimulation(payload) {
       if(payload?.preset!=="custom"||!this.supportsCustomMechanism(payload?.custom_model))return false;
       if(payload?.solver==="pnp")return payload.custom_model.species.every(species=>species.phase==="solution")
         &&payload.custom_model.reactions.every(reaction=>["bulk_mass_action","custom_bulk_rate","solution_electron"].includes(reaction.type));
-      if(!supportedIntegrators.includes(payload?.solver))return false;
-      const nonlinearSurface=payload.custom_model.reactions.some(reaction=>["adsorption","electroadsorption","surface_mass_action","custom_surface_rate"].includes(reaction.type));
-      return !nonlinearSurface||["bdf1","bdf2"].includes(payload.solver);
+      if(!supportedForwardSolvers.includes(payload?.solver))return false;
+      const nonlinearSurface=Boolean(payload.custom_model.film)||payload.custom_model.reactions.some(reaction=>["adsorption","electroadsorption","surface_mass_action","custom_surface_rate"].includes(reaction.type));
+      return !nonlinearSurface||["adaptive","adaptive_bdf2","bdf1","bdf2"].includes(payload.solver);
     }
 
     validateCustom(model) {
@@ -322,7 +329,7 @@
       const fittedReaction = model?.reactions?.some(reaction =>
         Object.entries(reaction?.parameters || {}).some(([name, parameter]) =>
           parameter?.fit && !(["solution_electron","surface_electron","electroadsorption"].includes(reaction?.type) && name === "n")));
-      const nonlinearSurface=model?.reactions?.some(reaction=>
+      const nonlinearSurface=Boolean(model?.film)||model?.reactions?.some(reaction=>
         ["adsorption","electroadsorption","surface_mass_action","custom_surface_rate"].includes(reaction?.type));
       return payload?.preset === "custom"
         && supportedIntegrators.includes(payload?.solver)
