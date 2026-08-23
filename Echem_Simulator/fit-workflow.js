@@ -7,6 +7,7 @@ let dataQualitySequence = 0;
 let latestDataQualityReport = null;
 let customFitParameterState = {};
 let customFitParameterRevision = -1;
+let fitSharedDiffusionEnabled = false;
 
 function fitSelectOptions(values,current) {
   return values.map(([value,label])=>`<option value="${value}" ${String(value)===String(current)?"selected":""}>${escapeHTML(label)}</option>`).join("");
@@ -72,9 +73,11 @@ function renderBrowserDatasets() {
   output.innerHTML=experimentalDatasets.map((dataset,index)=>{
     let low=Infinity,high=-Infinity;for(const potential of dataset.potential){low=Math.min(low,potential);high=Math.max(high,potential);}
     const overrides=Object.keys(dataset.initial_concentrations||{}).length+Object.keys(dataset.initial_coverages||{}).length;
-    return `<article class="dataset-card browser-fit-dataset"><div class="dataset-name"><strong>${escapeHTML(dataset.name)}</strong><span>${dataset.time.length.toLocaleString()} points · ${low.toFixed(3)} to ${high.toFixed(3)} V</span></div><label class="field"><span>Scan rate <b>V s⁻¹</b></span><input data-fit-dataset="${index}" type="number" min="1e-8" step="any" value="${dataset.scan_rate}"></label><button class="remove-dataset" data-remove-fit-dataset="${index}" type="button" aria-label="Remove ${escapeHTML(dataset.name)}">×</button><div class="dataset-conditions" data-quality-index="${index}"><span class="helper-text">Checking waveform…</span></div><details class="dataset-conditions"><summary>Experiment conditions${overrides?` · ${overrides} override${overrides===1?"":"s"}`:""}</summary><p class="helper-text">Override this experiment’s initial solution concentrations or surface coverages. Names must match the selected mechanism; blank uses its shared values.</p><div class="custom-condition-grid"><label class="field"><span>Initial concentrations <b>M</b></span><input data-fit-concentrations="${index}" type="text" placeholder="Ox=0.001; Catalyst=0.0002" value="${escapeHTML(formatInitialConcentrations(dataset.initial_concentrations))}"></label><label class="field"><span>Initial surface coverages <b>mol cm⁻²</b></span><input data-fit-coverages="${index}" type="text" placeholder="GammaOx=1e-10" value="${escapeHTML(formatInitialConcentrations(dataset.initial_coverages))}"></label></div></details>${fitImportEditor(dataset,index)}</article>`;
+    const background=dataset.background_model||"none";
+    return `<article class="dataset-card browser-fit-dataset"><div class="dataset-name"><strong>${escapeHTML(dataset.name)}</strong><span>${dataset.time.length.toLocaleString()} points · ${low.toFixed(3)} to ${high.toFixed(3)} V</span></div><label class="field"><span>Scan rate <b>V s⁻¹</b></span><input data-fit-dataset="${index}" type="number" min="1e-8" step="any" value="${dataset.scan_rate}"></label><label class="field"><span>Fitted current background</span><select data-fit-background="${index}">${fitSelectOptions([["none","None"],["offset_and_potential","Offset + potential slope"],["offset_potential_and_scan_direction","Offset + slope + scan direction"]],background)}</select></label><button class="remove-dataset" data-remove-fit-dataset="${index}" type="button" aria-label="Remove ${escapeHTML(dataset.name)}">×</button><div class="dataset-conditions" data-quality-index="${index}"><span class="helper-text">Checking waveform…</span></div><details class="dataset-conditions"><summary>Experiment conditions${overrides?` · ${overrides} override${overrides===1?"":"s"}`:""}</summary><p class="helper-text">Override this experiment’s initial solution concentrations or surface coverages. Names must match the selected mechanism; blank uses its shared values.</p><div class="custom-condition-grid"><label class="field"><span>Initial concentrations <b>M</b></span><input data-fit-concentrations="${index}" type="text" placeholder="Ox=0.001; Catalyst=0.0002" value="${escapeHTML(formatInitialConcentrations(dataset.initial_concentrations))}"></label><label class="field"><span>Initial surface coverages <b>mol cm⁻²</b></span><input data-fit-coverages="${index}" type="text" placeholder="GammaOx=1e-10" value="${escapeHTML(formatInitialConcentrations(dataset.initial_coverages))}"></label></div></details><p class="dataset-conditions helper-text">Background terms are fitted as explicit nuisance coefficients and counted in AIC/AICc. Use the scan-direction term only for a defensible branch-dependent charging or baseline offset: it can trade off directly with k0 by changing apparent branch separation.</p>${fitImportEditor(dataset,index)}</article>`;
   }).join("");
   $$('[data-fit-dataset]').forEach(input=>input.addEventListener("change",()=>{experimentalDatasets[+input.dataset.fitDataset].scan_rate=Number(input.value);void refreshDataQuality();}));
+  $$('[data-fit-background]').forEach(input=>input.addEventListener("change",()=>{experimentalDatasets[+input.dataset.fitBackground].background_model=input.value;}));
   $$('[data-fit-concentrations]').forEach(input=>input.addEventListener("change",()=>{
     const error=$("#data-error");
     try{experimentalDatasets[+input.dataset.fitConcentrations].initial_concentrations=parseInitialConcentrations(input.value);error.hidden=true;renderBrowserDatasets();}
@@ -103,15 +106,33 @@ function customFitParameterCards() {
   if(customFitParameterRevision!==customMechanismRevision){
     customFitParameterState=Object.fromEntries(entries.map(entry=>[entry.id,{fit:Boolean(entry.fit),value:Number(entry.value),lower:Number(entry.lower),upper:Number(entry.upper),transform:entry.transform}]));
     customFitParameterRevision=customMechanismRevision;
+    fitSharedDiffusionEnabled=false;
+  }
+  const diffusionEntries=entries.filter(entry=>/^s\d+_D$/.test(entry.id));
+  const canShareDiffusion=diffusionEntries.length>=2;
+  if(!canShareDiffusion)fitSharedDiffusionEnabled=false;
+  if(fitSharedDiffusionEnabled&&!customFitParameterState.shared_D){
+    const diffusionStates=diffusionEntries.map(entry=>customFitParameterState[entry.id]||entry);
+    customFitParameterState.shared_D={
+      fit:false,value:Number(diffusionStates[0].value),
+      lower:Math.max(...diffusionStates.map(entry=>Number(entry.lower))),
+      upper:Math.min(...diffusionStates.map(entry=>Number(entry.upper))),transform:"log"
+    };
+  }
+  if(fitSharedDiffusionEnabled){
+    entries=entries.filter(entry=>!/^s\d+_D$/.test(entry.id));
+    entries.unshift({id:"shared_D",label:"shared solution diffusion coefficient",unit:"cm² s⁻¹",advanced:true,...customFitParameterState.shared_D});
   }
   entries=entries.map(entry=>({...entry,...customFitParameterState[entry.id]}));
-  return `<div class="fit-explainer"><strong>Active editable reaction setup</strong><span>The simulation values supply the initial guesses below. Select only parameters that the loaded experiments can constrain. Diffusion fitting is advanced: normally fix D independently unless multiple scan rates and known concentrations and electrode area constrain it.</span></div>`+entries.map(entry=>`<article class="parameter-estimate-card"><label class="parameter-estimate-toggle"><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="fit" type="checkbox" ${entry.fit?"checked":""}><span><strong>Estimate ${escapeHTML(entry.label)}</strong><small>${escapeHTML(entry.transform)} coordinate${entry.advanced?" · advanced":""}</small></span></label><label class="parameter-start-value"><span>Starting / fixed value <b>${escapeHTML(entry.unit)}</b></span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="value" type="number" step="any" value="${entry.value}"></label><label class="parameter-start-value"><span>Lower bound</span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="lower" type="number" step="any" value="${entry.lower}"></label><label class="parameter-start-value"><span>Upper bound</span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="upper" type="number" step="any" value="${entry.upper}"></label></article>`).join("");
+  const sharing=canShareDiffusion?`<label class="fit-link-toggle"><input id="fit-link-diffusion" type="checkbox" ${fitSharedDiffusionEnabled?"checked":""}><span><strong>Use one diffusion coefficient for all solution species</strong><small>This reduces correlation when equal diffusion is chemically reasonable. Leave it off when independently measured diffusion coefficients differ.</small></span></label>`:"";
+  return `<div class="fit-explainer"><strong>Active editable reaction setup</strong><span>The simulation values supply the initial guesses below. Select only parameters that the loaded experiments can constrain. Diffusion fitting is advanced: normally fix D independently unless multiple scan rates and known concentrations and electrode area constrain it.</span></div>${sharing}`+entries.map(entry=>`<article class="parameter-estimate-card"><label class="parameter-estimate-toggle"><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="fit" type="checkbox" ${entry.fit?"checked":""}><span><strong>Estimate ${escapeHTML(entry.label)}</strong><small>${escapeHTML(entry.transform)} coordinate${entry.advanced?" · advanced":""}</small></span></label><label class="parameter-start-value"><span>Starting / fixed value <b>${escapeHTML(entry.unit)}</b></span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="value" type="number" step="any" value="${entry.value}"></label><label class="parameter-start-value"><span>Lower bound</span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="lower" type="number" step="any" value="${entry.lower}"></label><label class="parameter-start-value"><span>Upper bound</span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="upper" type="number" step="any" value="${entry.upper}"></label></article>`).join("");
 }
 
 function renderBrowserFitParameters() {
   if(!experimentalDatasets.length){$("#fit-parameter-list").innerHTML='<div class="empty-state">Load at least one voltammogram before choosing parameters to estimate.</div>';$("#fit-button").disabled=true;return;}
   $("#fit-parameter-list").innerHTML=customFitParameterCards();
   $("#fit-button").disabled=false;
+  $("#fit-link-diffusion")?.addEventListener("change",event=>{fitSharedDiffusionEnabled=event.target.checked;renderBrowserFitParameters();});
   $$('[data-custom-fit]').forEach(input=>input.addEventListener("change",()=>{const state=customFitParameterState[input.dataset.customFit];if(state)state[input.dataset.customFitKey]=input.dataset.customFitKey==="fit"?input.checked:Number(input.value);}));
 }
 
@@ -119,7 +140,7 @@ function browserFitDatasets() {
   return experimentalDatasets.map(dataset=>({
     time:[...dataset.time],potential:[...dataset.potential],current:[...dataset.current],
     scan_rate:Number(dataset.scan_rate),initial_concentrations:{...(dataset.initial_concentrations||{})},
-    initial_coverages:{...(dataset.initial_coverages||{})}
+    initial_coverages:{...(dataset.initial_coverages||{})},background_model:dataset.background_model||"none"
   }));
 }
 
@@ -140,8 +161,17 @@ function fitSettings() {
 
 function customFitPayload() {
   const model=serializeCustomModel();
-  for(const [id,settings] of Object.entries(customFitParameterState))applyCustomFitParameter(model,id,settings);
-  return {preset:"custom",...fitSettings(),custom_model:model};
+  for(const [id,settings] of Object.entries(customFitParameterState)){
+    if(id==="shared_D"||(fitSharedDiffusionEnabled&&/^s\d+_D$/.test(id)))continue;
+    applyCustomFitParameter(model,id,settings);
+  }
+  let shared_diffusion=null;
+  if(fitSharedDiffusionEnabled){
+    const settings=customFitParameterState.shared_D;
+    model.species.filter(species=>species.phase==="solution").forEach(species=>{species.D=Number(settings.value);species.fit_D=false;});
+    shared_diffusion={value:Number(settings.value),fit:Boolean(settings.fit),transform:settings.transform,lower:Number(settings.lower),upper:Number(settings.upper)};
+  }
+  return {preset:"custom",...fitSettings(),custom_model:model,shared_diffusion};
 }
 
 function fitNumber(value,digits=5) {
@@ -170,14 +200,65 @@ function renderDetailedResidualDiagnostics(report) {
   return `<div class="result-badges"><span class="result-badge ${report.passed?"success":""}">Residual diagnostics ${report.passed?"passed":"need review"}</span><span class="result-badge">AR(1) ρ=${fitNumber(report.residual_noise.correlation,3)}</span></div>${issues}<details class="advanced-settings"><summary>Residual trust details</summary><div><p class="helper-text">Weighted residual screens are descriptive checks for model inadequacy, not formal hypothesis tests.</p><table class="result-table"><thead><tr><th>Dataset</th><th>RMS</th><th>Bias / RMS</th><th>Lag-1</th><th>Branch / RMS</th><th>Scale ratio</th><th>Potential corr.</th><th>Outliers</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
 }
 
+function drawFitCanvas(canvasId,legendId,series) {
+  const canvas=$(canvasId);if(!canvas||!series.length)return;
+  const rect=canvas.getBoundingClientRect(),ratio=window.devicePixelRatio||1;
+  canvas.width=Math.max(1,Math.round(rect.width*ratio));canvas.height=Math.max(1,Math.round(rect.height*ratio));
+  const ctx=canvas.getContext("2d");ctx.scale(ratio,ratio);
+  const width=rect.width,height=rect.height,pad={left:68,right:24,top:22,bottom:52},plotW=width-pad.left-pad.right,plotH=height-pad.top-pad.bottom;
+  let xmin=Infinity,xmax=-Infinity,ymin=Infinity,ymax=-Infinity;
+  series.forEach(trace=>{trace.potential.forEach(value=>{xmin=Math.min(xmin,value);xmax=Math.max(xmax,value);});trace.current.forEach(value=>{ymin=Math.min(ymin,value);ymax=Math.max(ymax,value);});});
+  const xspan=Math.max(xmax-xmin,1e-12),yspan=Math.max(ymax-ymin,Math.max(Math.abs(ymin),Math.abs(ymax))*0.1,1e-15);
+  ymin-=.08*yspan;ymax+=.08*yspan;
+  const unit=currentUnit(Math.max(Math.abs(ymin),Math.abs(ymax))),reverse=activeVoltammogramConvention().reversePotentialAxis;
+  const xpx=x=>pad.left+(reverse?(xmax-x):(x-xmin))/xspan*plotW,ypx=y=>pad.top+(ymax-y)/(ymax-ymin)*plotH;
+  ctx.clearRect(0,0,width,height);ctx.fillStyle="#fbfcfb";ctx.fillRect(0,0,width,height);
+  ctx.font="11px Inter, sans-serif";ctx.textAlign="center";ctx.textBaseline="top";
+  for(let index=0;index<=5;index++){
+    const x=reverse?xmax-xspan*index/5:xmin+xspan*index/5,px=xpx(x);ctx.strokeStyle="#e2e8e5";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(px,pad.top);ctx.lineTo(px,pad.top+plotH);ctx.stroke();ctx.fillStyle="#60747b";ctx.fillText(x.toFixed(2),px,pad.top+plotH+9);
+  }
+  ctx.textAlign="right";ctx.textBaseline="middle";
+  for(let index=0;index<=5;index++){
+    const y=ymin+(ymax-ymin)*index/5,py=ypx(y);ctx.strokeStyle="#e2e8e5";ctx.beginPath();ctx.moveTo(pad.left,py);ctx.lineTo(pad.left+plotW,py);ctx.stroke();ctx.fillStyle="#60747b";ctx.fillText((y*unit.scale).toPrecision(3),pad.left-9,py);
+  }
+  if(ymin<0&&ymax>0){ctx.strokeStyle="#aebcb8";ctx.beginPath();ctx.moveTo(pad.left,ypx(0));ctx.lineTo(pad.left+plotW,ypx(0));ctx.stroke();}
+  series.forEach(trace=>{
+    ctx.strokeStyle=trace.color;ctx.lineWidth=trace.dashed?2:1.4;ctx.setLineDash(trace.dashed?[7,4]:[]);ctx.globalAlpha=trace.dashed?1:.72;ctx.beginPath();
+    trace.current.forEach((value,index)=>index?ctx.lineTo(xpx(trace.potential[index]),ypx(value)):ctx.moveTo(xpx(trace.potential[index]),ypx(value)));ctx.stroke();
+  });
+  ctx.setLineDash([]);ctx.globalAlpha=1;ctx.fillStyle="#304b53";ctx.font="12px Inter, sans-serif";ctx.textAlign="center";ctx.textBaseline="bottom";ctx.fillText("Potential vs reference (V)",pad.left+plotW/2,height-7);ctx.save();ctx.translate(16,pad.top+plotH/2);ctx.rotate(-Math.PI/2);ctx.fillText(`Current (${unit.label})`,0,0);ctx.restore();
+  $(legendId).innerHTML=series.map(trace=>`<span class="legend-item"><i class="legend-line ${trace.dashed?"fit-line":""}" style="background:${trace.color};color:${trace.color}"></i>${escapeHTML(trace.name)}</span>`).join("");
+}
+
+function drawFitCharts(result) {
+  const fitSeries=[],residualSeries=[];
+  experimentalDatasets.forEach((dataset,index)=>{
+    const color=colors[index%colors.length],name=dataset.name||`Dataset ${index+1}`,fitted=result.fitted_current[index]||[];
+    fitSeries.push({name:`${name} · experiment`,potential:dataset.potential,current:dataset.current.map(displayedCurrent),color,dashed:false});
+    fitSeries.push({name:`${name} · fit`,potential:dataset.potential,current:fitted.map(displayedCurrent),color,dashed:true});
+    residualSeries.push({name:`${name} · data − fit`,potential:dataset.potential,current:dataset.current.map((value,point)=>displayedCurrent(value-(fitted[point]||0))),color,dashed:false});
+  });
+  drawFitCanvas("#fit-overlay-chart","#fit-overlay-legend",fitSeries);
+  drawFitCanvas("#fit-residual-chart","#fit-residual-legend",residualSeries);
+}
+
+function renderFittedBackgrounds(backgrounds=[]) {
+  const active=backgrounds.filter(background=>background.model!=="none");if(!active.length)return "";
+  const rows=active.map(background=>`<tr><td>${escapeHTML(experimentalDatasets[background.dataset-1]?.name||`Dataset ${background.dataset}`)}</td><td>${Number(background.offset_A).toExponential(4)}</td><td>${Number(background.potential_slope_A_per_V).toExponential(4)}</td><td>${Number(background.scan_direction_offset_A).toExponential(4)}</td></tr>`).join("");
+  return `<details class="advanced-settings"><summary>Fitted current-background coefficients</summary><div><p class="helper-text">The potential term is centered at the midpoint of each dataset’s potential range. These nuisance parameters are included in information-criterion parameter counts.</p><table class="result-table"><thead><tr><th>Dataset</th><th>Offset (A)</th><th>Slope (A V⁻¹)</th><th>Scan-direction offset (A)</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
+}
+
 function renderFitResult(result) {
   const diagnostics=result.diagnostics;
   const warnings=diagnostics.warnings.length?diagnostics.warnings.map(message=>`<div class="model-warning"><strong>Review:</strong> ${escapeHTML(message)}</div>`).join(""):'<div class="result-badges"><span class="result-badge success">No automatic fit warning triggered</span></div>';
   const estimates=`<table class="result-table"><thead><tr><th>Parameter</th><th>Estimate</th><th>Standard error</th><th>Approx. 95% interval</th></tr></thead><tbody>${result.estimates.map(estimate=>`<tr><td>${escapeHTML(estimate.name)}</td><td>${fitNumber(estimate.value)}</td><td>${fitNumber(estimate.standard_error)}</td><td>${fitNumber(estimate.confidence_lower)} – ${fitNumber(estimate.confidence_upper)}</td></tr>`).join("")}</tbody></table>`;
   const robust=result.loss==="student_t";
   const attempts=`<details class="advanced-settings"><summary>Multistart details</summary><div>${diagnostics.adaptive_fallbacks?`<p class="helper-text">${diagnostics.adaptive_fallbacks} start${diagnostics.adaptive_fallbacks===1?"":"s"} used a bounded derivative-free rescue pass before LM polishing.</p>`:""}<table class="result-table"><thead><tr><th>Start</th><th>Status</th><th>${robust?"Robust objective":"Weighted RSS"}</th><th>Iterations</th></tr></thead><tbody>${result.attempts.map((attempt,index)=>`<tr><td>${index+1}</td><td>${attempt.error?"Failed":attempt.converged?"Converged":"Stopped"}</td><td>${(robust?attempt.objective:attempt.weighted_rss)==null?"—":Number(robust?attempt.objective:attempt.weighted_rss).toExponential(3)}</td><td>${attempt.iterations}</td></tr>`).join("")}</tbody></table></div></details>`;
+  const jacobian=result.jacobian_method==="profiled_background_finite_difference"?"Profiled background · finite differences":"Forward-sensitivity Jacobian";
+  const plots=`<section class="fit-plot-section"><h4>Experimental data and fitted model</h4><div class="fit-chart-wrap"><canvas id="fit-overlay-chart" aria-label="Experimental voltammograms and fitted model"></canvas></div><div id="fit-overlay-legend" class="legend"></div><h4>Residuals</h4><p class="helper-text">Residual = experimental current − fitted current. Random scatter around zero is the desired pattern.</p><div class="fit-chart-wrap residual"><canvas id="fit-residual-chart" aria-label="Fit residuals"></canvas></div><div id="fit-residual-legend" class="legend"></div></section>`;
   $("#fit-summary").className="";
-  $("#fit-summary").innerHTML=`<div class="result-badges"><span class="result-badge ${result.converged?"success":""}">${result.converged?"Best start converged":"Best start stopped"}</span><span class="result-badge">${result.loss==="student_t"?"Robust Student-t":"Least squares"}</span><span class="result-badge">Forward-sensitivity Jacobian</span><span class="result-badge">${diagnostics.converged_attempts}/${result.attempts.length} starts converged</span><span class="result-badge">${diagnostics.distinct_solutions} competitive solution${diagnostics.distinct_solutions===1?"":"s"}</span><span class="result-badge">AICc ${result.aicc==null?"—":Number(result.aicc).toFixed(2)}</span><span class="result-badge">${Number(result.elapsed_seconds||0).toFixed(2)} s</span></div>${warnings}${estimates}${attempts}${renderOptimizerRobustness(result.optimizer_robustness)}${renderDetailedResidualDiagnostics(result.residual_diagnostics)}${renderBrowserNumericalCertification(result.numerical_certification)}`;
+  $("#fit-summary").innerHTML=`<div class="result-badges"><span class="result-badge ${result.converged?"success":""}">${result.converged?"Best start converged":"Best start stopped"}</span><span class="result-badge">${result.loss==="student_t"?"Robust Student-t":"Least squares"}</span><span class="result-badge">${jacobian}</span><span class="result-badge">${diagnostics.converged_attempts}/${result.attempts.length} starts converged</span><span class="result-badge">${diagnostics.distinct_solutions} competitive solution${diagnostics.distinct_solutions===1?"":"s"}</span><span class="result-badge">AICc ${result.aicc==null?"—":Number(result.aicc).toFixed(2)}</span><span class="result-badge">${Number(result.elapsed_seconds||0).toFixed(2)} s</span></div>${warnings}${estimates}${renderFittedBackgrounds(result.fitted_backgrounds)}${plots}${attempts}${renderOptimizerRobustness(result.optimizer_robustness)}${renderDetailedResidualDiagnostics(result.residual_diagnostics)}${renderBrowserNumericalCertification(result.numerical_certification)}`;
+  requestAnimationFrame(()=>drawFitCharts(result));
 }
 
 async function runBrowserFit() {
@@ -193,9 +274,11 @@ async function runBrowserFit() {
     if(!engine.supportsCustomFit(payload))throw new Error("Select at least one continuous parameter from the active reaction setup.");
     const result=await engine.fitCustom(payload);
     latestBrowserFit=result;latestBrowserFitPayload=payload;
-    latestBrowserUncertaintyTarget={kind:"custom",payload};
+    latestBrowserUncertaintyTarget={kind:"custom",payload,fitResult:result};
     if(typeof renderKnownInputOptions==="function")renderKnownInputOptions();
     $("#uncertainty-parameter").innerHTML=result.estimates.map(estimate=>`<option value="${escapeHTML(estimate.name)}">${escapeHTML(estimate.name)}</option>`).join("");
+    if(typeof renderPosteriorPriorControls==="function")renderPosteriorPriorControls(result.estimates);
+    if(typeof updatePosteriorNoiseRecommendation==="function")updatePosteriorNoiseRecommendation(result);
     renderFitResult(result);
   }catch(problem){error.textContent=problem.message;error.hidden=false;}
   finally{button.disabled=!experimentalDatasets.length;button.textContent="Estimate selected parameters";}
@@ -212,7 +295,7 @@ $("#data-files").addEventListener("change",async event=>{
 $("#use-simulation-button").addEventListener("click",()=>{
   const error=$("#data-error");error.hidden=true;
   if(!latestResult){error.textContent="Run a simulation first.";error.hidden=false;return;}
-  experimentalDatasets.push({id:++datasetSequence,name:`${customMechanism.name} simulation`,time:[...latestResult.time],potential:[...latestResult.potential],current:[...latestResult.series[0].current],scan_rate:Number($('[data-key="scan_rate"]').value),initial_concentrations:{},initial_coverages:{}});
+  experimentalDatasets.push({id:++datasetSequence,name:`${customMechanism.name} simulation`,time:[...latestResult.time],potential:[...latestResult.potential],current:[...latestResult.series[0].current],scan_rate:Number($('[data-key="scan_rate"]').value),initial_concentrations:{},initial_coverages:{},background_model:"none"});
   renderBrowserDatasets();
 });
 $("#clear-data-button").addEventListener("click",()=>{experimentalDatasets.length=0;renderBrowserDatasets();});

@@ -177,6 +177,7 @@ function selectVoltammogramConvention(name) {
     drawChart(latestResult);
     updatePeakCurrentDisplay();
   }
+  if(typeof latestBrowserFit!=="undefined"&&latestBrowserFit)drawFitCharts(latestBrowserFit);
 }
 
 function chartSeries(result) {
@@ -446,6 +447,6 @@ $$('[data-plot-convention]').forEach(button=>button.addEventListener("click",()=
 $("#download-button").addEventListener("click", downloadCSV);
 $("#electrolyte-check-button").addEventListener("click",screenSupportingElectrolyte);
 $("#reset-button").addEventListener("click", () => { location.reload(); });
-window.addEventListener("resize", () => latestResult && drawChart(latestResult));
+window.addEventListener("resize", () => {if(latestResult)drawChart(latestResult);if(typeof latestBrowserFit!=="undefined"&&latestBrowserFit)drawFitCharts(latestBrowserFit);});
 checkEngine();
 syncSimulationSolverNote();

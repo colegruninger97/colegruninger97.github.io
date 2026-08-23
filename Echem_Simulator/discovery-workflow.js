@@ -9,6 +9,7 @@ let generatedCandidates = [];
 let sparseRateTable = null;
 let knownInputMeasurements = [];
 let knownInputOptionCache = [];
+let posteriorParameterNames = [];
 
 function binomial(n,k){let value=1;for(let i=1;i<=Math.min(k,n-k);i++)value=value*(n-i+1)/i;return Math.round(value);}
 
@@ -53,6 +54,8 @@ function selectVoltammetricRateForUncertainty(result,payload,index) {
   latestBrowserUncertaintyTarget={kind:"voltammetric_rate_law",discovery:structuredClone(payload),active:[...model.active]};
   renderKnownInputOptions();
   $("#uncertainty-parameter").innerHTML=model.estimates.map(estimate=>`<option value="${escapeHTML(estimate.name)}">${escapeHTML(estimate.name)}</option>`).join("");
+  renderPosteriorPriorControls(model.estimates);
+  updatePosteriorNoiseRecommendation();
   $("#uncertainty-results").className="fit-explainer";
   $("#uncertainty-results").innerHTML=`<strong>Conditional UQ target selected</strong><span>rate = ${escapeHTML(model.formula)}. Profile likelihood and posterior sampling will refit this support through the same Rust transport model.</span>`;
   error.hidden=true;
@@ -277,6 +280,79 @@ function uncertaintyWarningHTML(warnings) {
   return (warnings||[]).map(message=>`<div class="model-warning"><strong>Review:</strong> ${escapeHTML(message)}</div>`).join("");
 }
 
+function updatePosteriorPriorRow(row) {
+  const kind=row.querySelector("[data-posterior-prior-kind]").value;
+  const location=row.querySelector("[data-posterior-prior-location]");
+  const scale=row.querySelector("[data-posterior-prior-scale]");
+  const informative=kind!=="uniform";
+  location.disabled=!informative;scale.disabled=!informative;
+  location.placeholder=kind==="log_normal"?"median":"mean";
+  scale.placeholder=kind==="log_normal"?"log-SD":"SD";
+}
+
+function renderPosteriorPriorControls(estimates=[]) {
+  const container=$("#posterior-prior-list");if(!container)return;
+  posteriorParameterNames=estimates.map(estimate=>estimate.name);
+  if(!posteriorParameterNames.length){container.className="empty-state compact";container.textContent="This fit has no continuous parameters to sample.";return;}
+  container.className="posterior-prior-table-wrap";
+  container.innerHTML=`<table class="result-table posterior-prior-table"><thead><tr><th>Parameter</th><th>Distribution</th><th>Location</th><th>Scale</th></tr></thead><tbody>${posteriorParameterNames.map(name=>`<tr data-posterior-prior-row data-parameter="${escapeHTML(name)}"><td>${escapeHTML(name)}</td><td><select data-posterior-prior-kind aria-label="Prior distribution for ${escapeHTML(name)}"><option value="uniform">Uniform bounds</option><option value="normal">Normal</option><option value="log_normal">Log-normal</option></select></td><td><input data-posterior-prior-location type="number" step="any" aria-label="Prior location for ${escapeHTML(name)}" disabled></td><td><input data-posterior-prior-scale type="number" min="1e-15" step="any" aria-label="Prior scale for ${escapeHTML(name)}" disabled></td></tr>`).join("")}</tbody></table>`;
+  $$('[data-posterior-prior-row]').forEach(row=>{row.querySelector("[data-posterior-prior-kind]").addEventListener("change",()=>updatePosteriorPriorRow(row));updatePosteriorPriorRow(row);});
+}
+
+function posteriorPriorPayload() {
+  return $$('[data-posterior-prior-row]').map(row=>{
+    const type=row.querySelector("[data-posterior-prior-kind]").value;
+    if(type==="uniform")return {parameter:row.dataset.parameter,type};
+    const location=Number(row.querySelector("[data-posterior-prior-location]").value);
+    const scale=Number(row.querySelector("[data-posterior-prior-scale]").value);
+    if(!Number.isFinite(location)||!Number.isFinite(scale)||scale<=0)throw new Error(`${row.dataset.parameter} needs a finite prior location and a positive prior scale.`);
+    if(type==="log_normal"&&location<=0)throw new Error(`${row.dataset.parameter} needs a positive log-normal prior median.`);
+    return {parameter:row.dataset.parameter,type,location,scale};
+  });
+}
+
+function updatePosteriorNoiseRecommendation(fitResult=null) {
+  const output=$("#posterior-noise-recommendation");if(!output)return;
+  const correlation=Number(fitResult?.residual_diagnostics?.residual_noise?.correlation);
+  if(Number.isFinite(correlation)&&Math.abs(correlation)>=0.3){
+    output.textContent=`The fitted residuals have lag-one correlation ρ=${correlation.toFixed(3)}. Keep independent Gaussian as the baseline, then compare the optional AR(1) result; do not choose AR(1) solely because it gives a wider or narrower interval.`;
+  }else if(Number.isFinite(correlation)){
+    output.textContent=`The fitted residuals have lag-one correlation ρ=${correlation.toFixed(3)}. Independent Gaussian is a reasonable starting model; AR(1) remains available for a sensitivity comparison.`;
+  }else{
+    output.textContent="Start with independent noise. Compare AR(1) only when fitted residuals show substantial lag-one correlation or long runs.";
+  }
+}
+
+function posteriorNoiseHTML(noise=[]) {
+  if(!noise.length)return "";
+  const rows=noise.map(item=>{
+    const dataset=experimentalDatasets[item.dataset-1]?.name||`Experiment ${item.dataset}`;
+    const correlation=item.correlation_median==null?"—":`${fitNumber(item.correlation_median,3)} (${fitNumber(item.correlation_lower_95,3)} – ${fitNumber(item.correlation_upper_95,3)})`;
+    const correlationDiagnostics=item.correlation_r_hat==null?"—":`${Number(item.correlation_r_hat).toFixed(3)} · ${Number(item.correlation_effective_sample_size).toFixed(0)} / ${Number(item.correlation_tail_effective_sample_size).toFixed(0)}`;
+    return `<tr><td>${escapeHTML(dataset)}</td><td>${item.model==="ar1_gaussian"?"AR(1) Gaussian":"Independent Gaussian"}</td><td>${fitNumber(item.innovation_scale_median_A)} (${fitNumber(item.innovation_scale_lower_95_A)} – ${fitNumber(item.innovation_scale_upper_95_A)})</td><td>${Number(item.innovation_scale_r_hat).toFixed(3)} · ${Number(item.innovation_scale_effective_sample_size).toFixed(0)} / ${Number(item.innovation_scale_tail_effective_sample_size).toFixed(0)}</td><td>${correlation}</td><td>${correlationDiagnostics}</td></tr>`;
+  }).join("");
+  return `<h4>Inferred experimental noise</h4><p class="helper-text">Noise SD is reported in amperes for each experiment. Under AR(1), it is the innovation SD; ρ describes correlation between adjacent residuals.</p><table class="result-table"><thead><tr><th>Experiment</th><th>Model</th><th>Noise SD median (95% CrI), A</th><th>SD R̂ · bulk / tail ESS</th><th>ρ median (95% CrI)</th><th>ρ R̂ · bulk / tail ESS</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function posteriorPredictiveHTML(predictive) {
+  if(!predictive?.length)return "";
+  return `<section class="fit-plot-section"><h4>Posterior predictive check</h4><p class="helper-text">The colored median is the latent model current. The gray 95% bounds also include a fresh draw of the inferred measurement noise, so approximately 95% of comparable observations should fall inside them when the mechanism and noise model are adequate.</p><div class="fit-chart-wrap"><canvas id="posterior-predictive-chart" aria-label="Experimental voltammograms, posterior model current, and full posterior predictive bounds"></canvas></div><div id="posterior-predictive-legend" class="legend"></div></section>`;
+}
+
+function drawPosteriorPredictive(predictive) {
+  if(!predictive?.length||typeof drawFitCanvas!=="function")return;
+  const series=[];
+  predictive.forEach((band,index)=>{
+    const dataset=experimentalDatasets[band.dataset-1],color=colors[index%colors.length];if(!dataset)return;
+    const name=dataset.name||`Dataset ${band.dataset}`;
+    series.push({name:`${name} · experiment`,potential:dataset.potential,current:dataset.current.map(displayedCurrent),color,dashed:false});
+    series.push({name:`${name} · latent median`,potential:dataset.potential,current:band.median.map(displayedCurrent),color,dashed:true});
+    series.push({name:`${name} · predictive 95% lower`,potential:dataset.potential,current:band.observed_lower_95.map(displayedCurrent),color:"#a5b2b8",dashed:true});
+    series.push({name:`${name} · predictive 95% upper`,potential:dataset.potential,current:band.observed_upper_95.map(displayedCurrent),color:"#a5b2b8",dashed:true});
+  });
+  drawFitCanvas("#posterior-predictive-chart","#posterior-predictive-legend",series);
+}
+
 async function runProfileLikelihood() {
   const error=$("#uncertainty-error"),button=$("#profile-button");error.hidden=true;
   const target=latestBrowserUncertaintyTarget;
@@ -301,13 +377,18 @@ async function runPosterior() {
   if(!target){error.textContent="Complete a parameter fit or choose a discovered rate law first.";error.hidden=false;return;}
   button.disabled=true;button.textContent="Sampling posterior…";
   try{
-    const posterior={samples:Number($("#posterior-samples").value),burn_in:Number($("#posterior-burnin").value),proposal_scale:Number($("#posterior-scale").value),seed:Number($("#posterior-seed").value)};
+    const posterior={samples:Number($("#posterior-samples").value),burn_in:Number($("#posterior-burnin").value),chains:Number($("#posterior-chains").value),proposal_scale:Number($("#posterior-scale").value),seed:Number($("#posterior-seed").value),noise_model:$("#posterior-noise-model").value,priors:posteriorPriorPayload()};
     let result;
     if(target.kind==="voltammetric_rate_law")result=await window.electrochemBrowserEngine.posteriorVoltammetricRate(target.discovery,target.active,posterior);
     else if(target.kind==="custom")result=await window.electrochemBrowserEngine.posteriorCustom(target.payload,posterior);
     else result=await window.electrochemBrowserEngine.posteriorSolutionE(target.payload,posterior);
     $("#uncertainty-results").className="";
-    $("#uncertainty-results").innerHTML=`<div class="result-badges"><span class="result-badge">Acceptance ${(100*result.acceptance_rate).toFixed(1)}%</span><span class="result-badge">${result.retained_samples} retained</span><span class="result-badge">Seed ${result.seed}</span><span class="result-badge">${Number(result.elapsed_seconds||0).toFixed(2)} s</span></div>${uncertaintyWarningHTML(result.warnings)}<p class="helper-text">${escapeHTML(result.prior)}</p><table class="result-table"><thead><tr><th>Parameter</th><th>Mean</th><th>SD</th><th>Median</th><th>95% credible interval</th><th>Effective samples</th></tr></thead><tbody>${result.parameters.map(parameter=>`<tr><td>${escapeHTML(parameter.name)}</td><td>${fitNumber(parameter.mean)}</td><td>${fitNumber(parameter.standard_deviation)}</td><td>${fitNumber(parameter.median)}</td><td>${fitNumber(parameter.lower_95)} – ${fitNumber(parameter.upper_95)}</td><td>${Number(parameter.effective_sample_size).toFixed(0)}</td></tr>`).join("")}</tbody></table>`;
+    const noiseDiagnostics=(result.noise||[]).flatMap(noise=>[{r_hat:noise.innovation_scale_r_hat,effective_sample_size:noise.innovation_scale_effective_sample_size,tail_effective_sample_size:noise.innovation_scale_tail_effective_sample_size},...(noise.correlation_r_hat==null?[]:[{r_hat:noise.correlation_r_hat,effective_sample_size:noise.correlation_effective_sample_size,tail_effective_sample_size:noise.correlation_tail_effective_sample_size}])]);
+    const allDiagnostics=[...result.parameters,...noiseDiagnostics],maximumRhat=Math.max(...allDiagnostics.map(parameter=>Number(parameter.r_hat))),minimumEss=Math.min(...allDiagnostics.map(parameter=>Math.min(Number(parameter.effective_sample_size),Number(parameter.tail_effective_sample_size))));
+    const reliable=maximumRhat<=1.01&&minimumEss>=100;
+    const chainRates=result.chain_acceptance_rates.map((rate,index)=>`Chain ${index+1}: ${(100*rate).toFixed(1)}%`).join(" · ");
+    $("#uncertainty-results").innerHTML=`<div class="result-badges"><span class="result-badge ${reliable?"success":""}">${reliable?"Chains agree":"Diagnostics need review"}</span><span class="result-badge">R̂ max ${maximumRhat.toFixed(3)}</span><span class="result-badge">${result.chains} chains · ${result.retained_samples} draws</span><span class="result-badge">Acceptance ${(100*result.acceptance_rate).toFixed(1)}%</span><span class="result-badge">Seed ${result.seed}</span><span class="result-badge">${Number(result.elapsed_seconds||0).toFixed(2)} s</span></div>${uncertaintyWarningHTML(result.warnings)}<p class="helper-text">${escapeHTML(result.likelihood)}. ${escapeHTML(result.prior)}.</p><details class="advanced-settings"><summary>Chain acceptance</summary><div><p class="helper-text">${escapeHTML(chainRates)}</p></div></details><table class="result-table"><thead><tr><th>Parameter</th><th>Prior</th><th>Mean ± MCSE</th><th>SD</th><th>Median</th><th>95% credible interval</th><th>R̂</th><th>Bulk / tail ESS</th></tr></thead><tbody>${result.parameters.map(parameter=>`<tr><td>${escapeHTML(parameter.name)}</td><td>${escapeHTML(parameter.prior)}</td><td>${fitNumber(parameter.mean)} ± ${fitNumber(parameter.monte_carlo_standard_error,3)}</td><td>${fitNumber(parameter.standard_deviation)}</td><td>${fitNumber(parameter.median)}</td><td>${fitNumber(parameter.lower_95)} – ${fitNumber(parameter.upper_95)}</td><td>${Number(parameter.r_hat).toFixed(3)}</td><td>${Number(parameter.effective_sample_size).toFixed(0)} / ${Number(parameter.tail_effective_sample_size).toFixed(0)}</td></tr>`).join("")}</tbody></table>${posteriorNoiseHTML(result.noise)}${posteriorPredictiveHTML(result.predictive)}`;
+    requestAnimationFrame(()=>drawPosteriorPredictive(result.predictive));
   }catch(problem){error.textContent=problem.message;error.hidden=false;}
   finally{button.disabled=false;button.textContent="Sample posterior";}
 }
