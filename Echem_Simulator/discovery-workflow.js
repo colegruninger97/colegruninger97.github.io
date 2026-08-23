@@ -364,7 +364,7 @@ async function runProfileLikelihood() {
     if(target.kind==="voltammetric_rate_law")result=await window.electrochemBrowserEngine.profileVoltammetricRate(target.discovery,target.active,profile);
     else if(target.kind==="custom")result=await window.electrochemBrowserEngine.profileCustom(target.payload,profile);
     else result=await window.electrochemBrowserEngine.profileSolutionE(target.payload,profile);
-    const interval=result.region==="interval"?`${fitNumber(result.confidence_lower)} to ${fitNumber(result.confidence_upper)}`:result.region.replaceAll("_"," ");
+    const interval=result.region==="interval"?`${fitNumber(result.confidence_lower)} to ${fitNumber(result.confidence_upper)}`:result.region==="lower_bound"?`≥ ${fitNumber(result.confidence_lower)}`:result.region==="upper_bound"?`≤ ${fitNumber(result.confidence_upper)}`:result.region.replaceAll("_"," ");
     $("#uncertainty-results").className="";
     $("#uncertainty-results").innerHTML=`<div class="result-badges"><span class="result-badge ${result.region==="interval"?"success":""}">95% profile: ${escapeHTML(interval)}</span><span class="result-badge">Estimate ${fitNumber(result.estimate)}</span><span class="result-badge">${Number(result.elapsed_seconds||0).toFixed(2)} s</span></div>${uncertaintyWarningHTML(result.warnings)}<table class="result-table"><thead><tr><th>Fixed value</th><th>Likelihood-ratio statistic</th></tr></thead><tbody>${result.values.map((value,index)=>`<tr><td>${fitNumber(value)}</td><td>${Number(result.statistic[index]).toFixed(4)}</td></tr>`).join("")}</tbody></table>`;
   }catch(problem){error.textContent=problem.message;error.hidden=false;}
