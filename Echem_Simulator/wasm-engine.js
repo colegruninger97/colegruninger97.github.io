@@ -325,7 +325,7 @@
 
     supportsCustomFit(payload) {
       const model = payload?.custom_model;
-      const fittedSpecies = model?.species?.some(species => species?.fit_D);
+      const fittedSpecies = Boolean(payload?.shared_diffusion?.fit)||model?.species?.some(species => species?.fit_D);
       const fittedReaction = model?.reactions?.some(reaction =>
         Object.entries(reaction?.parameters || {}).some(([name, parameter]) =>
           parameter?.fit && !(["solution_electron","surface_electron","electroadsorption"].includes(reaction?.type) && name === "n")));
