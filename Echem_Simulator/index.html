@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Browser-based cyclic voltammetry simulation, fitting, mechanism discovery, and uncertainty analysis in Rust and WebAssembly.">
   <title>EchemLab — Electrochemical Simulation and Inference</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20260831-demo">
 </head>
 <body>
   <header class="app-header">
@@ -28,6 +28,7 @@
 
   <div class="app-shell">
     <nav class="workflow-nav" aria-label="Analysis workflow">
+      <button class="nav-item demo-nav-item" type="button" data-view-target="demo"><span><strong>Classroom demo</strong></span></button>
       <button class="nav-item active" type="button" data-view-target="simulate">
         <span><strong>Simulate CV</strong></span>
       </button>
@@ -38,6 +39,32 @@
     </nav>
 
     <main>
+      <aside id="classroom-demo-strip" class="classroom-demo-strip" aria-label="Classroom demo navigation" hidden>
+        <div><strong>Classroom demo loaded</strong><span>Cu(TMGqu)₂ · 0.1001 V s⁻¹ · 552 points</span></div>
+        <div class="demo-strip-actions"><button type="button" data-demo-route="data">1 · Inspect data</button><button type="button" data-demo-route="fit">2 · Fit E model</button><button type="button" data-demo-route="discover">3 · Compare mechanisms</button><button type="button" data-demo-route="uncertainty">4 · Quantify uncertainty</button><button type="button" data-demo-route="demo">Lesson notes</button></div>
+      </aside>
+
+      <div id="view-demo" class="workbench-view">
+        <section class="intro-row demo-intro"><div><p class="eyebrow">Guided real-data exercise</p><h2>What can one voltammogram actually tell us?</h2><p>Fit a public Cu(II/I) cyclic voltammogram, compare plausible mechanisms, and use profile likelihood to separate a numerical estimate from an identifiable measurement.</p></div><button id="load-classroom-demo" class="button primary" type="button">Load classroom demo</button></section>
+        <section class="demo-overview">
+          <div class="demo-dataset-card">
+            <p class="tool-kicker">Public FAIR dataset</p>
+            <h3>[Cu(TMGqu)₂]PF₆ in acetonitrile</h3>
+            <dl><div><dt>Experiment</dt><dd>One complete negative-going CV cycle</dd></div><div><dt>Scan rate</dt><dd>0.1001 V s⁻¹</dd></div><div><dt>Reference</dt><dd>Fc/Fc⁺ = 0 V</dd></div><div><dt>Working model</dt><dd>Ox + e⁻ ⇌ Red</dd></div></dl>
+            <p>The classroom file is a 552-point extract of the published trace. It is already expressed in volts, amperes, seconds, and EchemLab's cathodic-positive convention.</p>
+            <div class="inline-actions"><a class="text-link" href="https://doi.org/10.1039/d4sc08620a" target="_blank" rel="noreferrer">FAIR-data article ↗</a><a class="text-link" href="https://doi.org/10.14272/UVLHGRADYISRGZ-UHFFFAOYSA-N/CHMO0000025.11" target="_blank" rel="noreferrer">Dataset record ↗</a></div>
+          </div>
+          <aside class="demo-question-card"><p class="tool-kicker">Central question</p><blockquote>Does the best-fitting value of <i>k</i>⁰ mean that this experiment measured <i>k</i>⁰ accurately?</blockquote><p>Students should distinguish parameter estimation from parameter identifiability. The formal potential is strongly visible in the wave position; electron-transfer rate and diffusion can trade off through the wave shape and current scale.</p><div class="model-warning"><strong>Teaching caveat:</strong> the repository metadata and instrument header disagree about electrode identity and area, and only one scan rate is available. Treat the exercise as model criticism—not a publishable kinetic determination.</div></aside>
+        </section>
+        <section class="demo-lesson-grid" aria-label="Classroom demo steps">
+          <article><span class="demo-step-number">1</span><div><p class="tool-kicker">Data provenance</p><h3>Inspect the imported experiment</h3><p>Review the inferred scan rate, potential range, units, current sign, and preflight warnings. Ask which quantities were measured and which are assumptions.</p><button class="text-link" type="button" data-demo-route="data">Open the loaded dataset →</button></div></article>
+          <article><span class="demo-step-number">2</span><div><p class="tool-kicker">Parameter estimation</p><h3>Fit the one-electron E model</h3><p>Estimate E⁰, <i>k</i>⁰, and one shared diffusion coefficient using least squares. Compare the fitted overlay with the residual plot before reading the parameter table.</p><button class="text-link" type="button" data-demo-route="fit">Open the configured fit →</button></div></article>
+          <article><span class="demo-step-number">3</span><div><p class="tool-kicker">Mechanism discovery</p><h3>Compare E, quasi-reversible E, EC, and CE</h3><p>Run the standard library comparison. Look for observational-equivalence warnings and ask whether one scan rate can justify a following or preceding chemical step.</p><button class="text-link" type="button" data-demo-route="discover">Open mechanism comparison →</button></div></article>
+          <article><span class="demo-step-number">4</span><div><p class="tool-kicker">Uncertainty</p><h3>Profile the rate constant</h3><p>After fitting, choose <code>r1_k0</code> and calculate the five-point profile. A one-sided or open interval is a scientific result: the data set a limit but do not locate both sides of <i>k</i>⁰.</p><button class="text-link" type="button" data-demo-route="uncertainty">Open uncertainty analysis →</button></div></article>
+        </section>
+        <section class="full-panel spaced demo-discussion"><div><p class="tool-kicker">Expected discussion—not an answer key</p><h3>What students should notice</h3></div><ul><li>E⁰ should remain near the visible midpoint of the copper wave.</li><li>The fitted <i>k</i>⁰ changes when diffusion, current background, or candidate mechanism changes.</li><li>Closely ranked or observationally equivalent mechanisms are not chemically proven alternatives.</li><li>Structured residuals are evidence against the complete observation model, even when the optimizer converges.</li><li>Additional scan rates and independently measured concentration, area, and diffusion would be more valuable than more optimizer iterations.</li></ul><p id="classroom-demo-status" class="demo-status" role="status">Load the demo to configure the reaction setup, dataset, fit, discovery, and uncertainty controls.</p></section>
+      </div>
+
       <div id="view-simulate" class="workbench-view active">
       <section class="intro-row">
         <div>
@@ -378,7 +405,8 @@
   <script src="import_data.js" defer></script>
   <script src="app.js" defer></script>
   <script src="mechanism_builder.js" defer></script>
-  <script src="fit-workflow.js" defer></script>
+  <script src="fit-workflow.js?v=20260831-demo" defer></script>
   <script src="discovery-workflow.js" defer></script>
+  <script src="demo-workflow.js" defer></script>
 </body>
 </html>

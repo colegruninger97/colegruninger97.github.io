@@ -277,6 +277,7 @@ async function runBrowserFit() {
     latestBrowserUncertaintyTarget={kind:"custom",payload,fitResult:result};
     if(typeof renderKnownInputOptions==="function")renderKnownInputOptions();
     $("#uncertainty-parameter").innerHTML=result.estimates.map(estimate=>`<option value="${escapeHTML(estimate.name)}">${escapeHTML(estimate.name)}</option>`).join("");
+    if(!$("#classroom-demo-strip")?.hidden&&result.estimates.some(estimate=>estimate.name==="r1_k0"))$("#uncertainty-parameter").value="r1_k0";
     if(typeof renderPosteriorPriorControls==="function")renderPosteriorPriorControls(result.estimates);
     if(typeof updatePosteriorNoiseRecommendation==="function")updatePosteriorNoiseRecommendation(result);
     renderFitResult(result);
