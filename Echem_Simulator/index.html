@@ -205,6 +205,8 @@
         </section>
         <section class="full-panel spaced">
           <div class="section-heading"><span class="step-chip">B</span><div><h3>Study datasets <span id="dataset-count" class="dataset-count">0 loaded</span></h3><p>Confirm each scan rate, column mapping, unit conversion, current sign, and reference-potential shift before fitting.</p></div></div>
+          <div class="fit-explainer"><strong>Current background for the whole study</strong><span>Use one shared charging capacitance when the files include double-layer current. EchemLab scales that current by each experiment’s scan rate and reverses its sign at the switching potential; it also fits one constant offset per file.</span></div>
+          <label class="field fit-study-background"><span>Charging-current treatment</span><select id="fit-background-model"><option value="scan_rate_scaled_charging" selected>Shared scan-rate-scaled charging + file offsets</option><option value="none">None — data already background corrected</option></select></label>
           <div id="dataset-list" class="dataset-list"><div class="empty-state">No experimental files loaded yet.</div></div>
           <div class="fit-next-row"><p>Your data are processed in memory and fitted together as one study. The application does not retain uploaded files.</p><button id="fit-next-button" class="button primary" type="button" data-view-target="fit" disabled>Continue to parameter selection</button></div>
         </section>
