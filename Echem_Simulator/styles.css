@@ -192,7 +192,7 @@ main { width: min(1380px, 100%); margin: 0 auto; padding: 27px clamp(22px,3vw,48
 .drop-zone input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .dataset-list { display: grid; gap: 10px; }
 .dataset-card { display: grid; grid-template-columns: minmax(160px,1fr) repeat(3,minmax(110px,.55fr)) auto; gap: 12px; align-items: end; padding: 13px; border: 1px solid var(--line); border-radius: 9px; }
-.dataset-card.browser-fit-dataset { grid-template-columns: minmax(220px,1fr) minmax(145px,.32fr) minmax(220px,.55fr) auto; }
+.dataset-card.browser-fit-dataset { grid-template-columns: minmax(220px,1fr) minmax(145px,.32fr) auto; }
 .dataset-card.browser-fit-dataset .dataset-conditions { grid-column: 1 / -1; }
 .dataset-name strong, .dataset-name span { display: block; }
 .dataset-name strong { margin-bottom: 4px; font-size: 13px; }
@@ -213,6 +213,7 @@ main { width: min(1380px, 100%); margin: 0 auto; padding: 27px clamp(22px,3vw,48
 .parameter-choice strong { font-size: 12px; }
 .parameter-choice small { color: var(--muted); font-size: 10px; }
 .fit-explainer { display: grid; gap: 4px; margin-top: 12px; padding: 12px 14px; color: #47677c; background: var(--carolina-soft); border-left: 3px solid var(--carolina); border-radius: 7px; font-size: 11px; line-height: 1.5; }
+.fit-study-background { max-width: 520px; margin: 12px 0 16px; }
 .fit-explainer strong { font-size: 12px; }
 .fit-link-toggle { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; margin-top: 9px; padding: 11px 13px; color: #456071; background: #f2f7fa; border: 1px solid #cfdee7; border-radius: 8px; cursor: pointer; }
 .fit-link-toggle input { width: 18px; height: 18px; accent-color: var(--carolina-dark); }

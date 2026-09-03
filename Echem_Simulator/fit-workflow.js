@@ -73,11 +73,9 @@ function renderBrowserDatasets() {
   output.innerHTML=experimentalDatasets.map((dataset,index)=>{
     let low=Infinity,high=-Infinity;for(const potential of dataset.potential){low=Math.min(low,potential);high=Math.max(high,potential);}
     const overrides=Object.keys(dataset.initial_concentrations||{}).length+Object.keys(dataset.initial_coverages||{}).length;
-    const background=dataset.background_model||"none";
-    return `<article class="dataset-card browser-fit-dataset"><div class="dataset-name"><strong>${escapeHTML(dataset.name)}</strong><span>${dataset.time.length.toLocaleString()} points · ${low.toFixed(3)} to ${high.toFixed(3)} V</span></div><label class="field"><span>Scan rate <b>V s⁻¹</b></span><input data-fit-dataset="${index}" type="number" min="1e-8" step="any" value="${dataset.scan_rate}"></label><label class="field"><span>Fitted current background</span><select data-fit-background="${index}">${fitSelectOptions([["none","None"],["offset_and_potential","Offset + potential slope"],["offset_potential_and_scan_direction","Offset + slope + scan direction"]],background)}</select></label><button class="remove-dataset" data-remove-fit-dataset="${index}" type="button" aria-label="Remove ${escapeHTML(dataset.name)}">×</button><div class="dataset-conditions" data-quality-index="${index}"><span class="helper-text">Checking waveform…</span></div><details class="dataset-conditions"><summary>Experiment conditions${overrides?` · ${overrides} override${overrides===1?"":"s"}`:""}</summary><p class="helper-text">Override this experiment’s initial solution concentrations or surface coverages. Names must match the selected mechanism; blank uses its shared values.</p><div class="custom-condition-grid"><label class="field"><span>Initial concentrations <b>M</b></span><input data-fit-concentrations="${index}" type="text" placeholder="Ox=0.001; Catalyst=0.0002" value="${escapeHTML(formatInitialConcentrations(dataset.initial_concentrations))}"></label><label class="field"><span>Initial surface coverages <b>mol cm⁻²</b></span><input data-fit-coverages="${index}" type="text" placeholder="GammaOx=1e-10" value="${escapeHTML(formatInitialConcentrations(dataset.initial_coverages))}"></label></div></details><p class="dataset-conditions helper-text">Background terms are fitted as explicit nuisance coefficients and counted in AIC/AICc. Use the scan-direction term only for a defensible branch-dependent charging or baseline offset: it can trade off directly with k0 by changing apparent branch separation.</p>${fitImportEditor(dataset,index)}</article>`;
+    return `<article class="dataset-card browser-fit-dataset"><div class="dataset-name"><strong>${escapeHTML(dataset.name)}</strong><span>${dataset.time.length.toLocaleString()} points · ${low.toFixed(3)} to ${high.toFixed(3)} V</span></div><label class="field"><span>Scan rate <b>V s⁻¹</b></span><input data-fit-dataset="${index}" type="number" min="1e-8" step="any" value="${dataset.scan_rate}"></label><button class="remove-dataset" data-remove-fit-dataset="${index}" type="button" aria-label="Remove ${escapeHTML(dataset.name)}">×</button><div class="dataset-conditions" data-quality-index="${index}"><span class="helper-text">Checking waveform…</span></div><details class="dataset-conditions"><summary>Experiment conditions${overrides?` · ${overrides} override${overrides===1?"":"s"}`:""}</summary><p class="helper-text">Override this experiment’s initial solution concentrations or surface coverages. Names must match the selected mechanism; blank uses its shared values.</p><div class="custom-condition-grid"><label class="field"><span>Initial concentrations <b>M</b></span><input data-fit-concentrations="${index}" type="text" placeholder="Ox=0.001; Catalyst=0.0002" value="${escapeHTML(formatInitialConcentrations(dataset.initial_concentrations))}"></label><label class="field"><span>Initial surface coverages <b>mol cm⁻²</b></span><input data-fit-coverages="${index}" type="text" placeholder="GammaOx=1e-10" value="${escapeHTML(formatInitialConcentrations(dataset.initial_coverages))}"></label></div></details>${fitImportEditor(dataset,index)}</article>`;
   }).join("");
   $$('[data-fit-dataset]').forEach(input=>input.addEventListener("change",()=>{experimentalDatasets[+input.dataset.fitDataset].scan_rate=Number(input.value);void refreshDataQuality();}));
-  $$('[data-fit-background]').forEach(input=>input.addEventListener("change",()=>{experimentalDatasets[+input.dataset.fitBackground].background_model=input.value;}));
   $$('[data-fit-concentrations]').forEach(input=>input.addEventListener("change",()=>{
     const error=$("#data-error");
     try{experimentalDatasets[+input.dataset.fitConcentrations].initial_concentrations=parseInitialConcentrations(input.value);error.hidden=true;renderBrowserDatasets();}
@@ -137,10 +135,11 @@ function renderBrowserFitParameters() {
 }
 
 function browserFitDatasets() {
+  const backgroundModel=$("#fit-background-model")?.value||"none";
   return experimentalDatasets.map(dataset=>({
     time:[...dataset.time],potential:[...dataset.potential],current:[...dataset.current],
     scan_rate:Number(dataset.scan_rate),initial_concentrations:{...(dataset.initial_concentrations||{})},
-    initial_coverages:{...(dataset.initial_coverages||{})},background_model:dataset.background_model||"none"
+    initial_coverages:{...(dataset.initial_coverages||{})},background_model:backgroundModel
   }));
 }
 
@@ -244,8 +243,12 @@ function drawFitCharts(result) {
 
 function renderFittedBackgrounds(backgrounds=[]) {
   const active=backgrounds.filter(background=>background.model!=="none");if(!active.length)return "";
-  const rows=active.map(background=>`<tr><td>${escapeHTML(experimentalDatasets[background.dataset-1]?.name||`Dataset ${background.dataset}`)}</td><td>${Number(background.offset_A).toExponential(4)}</td><td>${Number(background.potential_slope_A_per_V).toExponential(4)}</td><td>${Number(background.scan_direction_offset_A).toExponential(4)}</td></tr>`).join("");
-  return `<details class="advanced-settings"><summary>Fitted current-background coefficients</summary><div><p class="helper-text">The potential term is centered at the midpoint of each dataset’s potential range. These nuisance parameters are included in information-criterion parameter counts.</p><table class="result-table"><thead><tr><th>Dataset</th><th>Offset (A)</th><th>Slope (A V⁻¹)</th><th>Scan-direction offset (A)</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
+  const capacitance=Number(active[0].charging_capacitance_F);
+  const area=Number($('[data-key="electrode_area"]')?.value||0);
+  const arealCapacitance=area>0?capacitance/area:null;
+  const capacitanceReview=arealCapacitance!==null&&arealCapacitance>1e-3?`<div class="model-warning"><strong>Review charging capacitance:</strong> ${(1e6*arealCapacitance).toPrecision(4)} μF cm⁻² is unusually large for a compact electrode. Check the electrode area, current units, cycle/history, and whether the background model is absorbing missing faradaic physics.</div>`:"";
+  const rows=active.map(background=>{const scanRate=Number(experimentalDatasets[background.dataset-1]?.scan_rate||0);return `<tr><td>${escapeHTML(experimentalDatasets[background.dataset-1]?.name||`Dataset ${background.dataset}`)}</td><td>${Number(background.offset_A).toExponential(4)}</td><td>${Math.abs(capacitance*scanRate).toExponential(4)}</td></tr>`;}).join("");
+  return `${capacitanceReview}<details class="advanced-settings"><summary>Fitted charging-current model</summary><div><p class="helper-text">Shared whole-cell capacitance: <b>${capacitance.toExponential(4)} F</b>${arealCapacitance===null?"":` (${(1e6*arealCapacitance).toPrecision(4)} μF cm⁻²)`}. EchemLab uses I<sub>charge</sub> = C<sub>cell</sub>v on the cathodic scan and reverses its sign on the return scan. The constant file offsets and the one shared capacitance are counted in AIC/AICc.</p><table class="result-table"><thead><tr><th>Dataset</th><th>Constant offset (A)</th><th>|C<sub>cell</sub>v| (A)</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
 }
 
 function renderFitResult(result) {
@@ -299,6 +302,7 @@ $("#use-simulation-button").addEventListener("click",()=>{
   renderBrowserDatasets();
 });
 $("#clear-data-button").addEventListener("click",()=>{experimentalDatasets.length=0;renderBrowserDatasets();});
+$("#fit-background-model").addEventListener("change",()=>{latestBrowserFit=null;latestBrowserFitPayload=null;});
 $("#fit-loss").addEventListener("change",()=>{$$(".robust-fit-setting").forEach(field=>{field.hidden=$("#fit-loss").value!=="student_t";});});
 $("#fit-button").addEventListener("click",runBrowserFit);
 renderBrowserDatasets();
