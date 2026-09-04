@@ -476,6 +476,16 @@ ninja.data = [{
           description: "Mathematics for business and the social sciences (two sections).",
           section: "Teachings",handler: () => {
               window.location.href = "/teachings/fordham-math-1108-fall-2025/";
+            },},{id: "teachings-math-1108-finite-mathematics-for-business",
+          title: 'Math 1108: Finite Mathematics for Business',
+          description: "Finite Mathematics for Business at Fordham University.",
+          section: "Teachings",handler: () => {
+              window.location.href = "/teachings/fordham-math-1108-fall-2026/";
+            },},{id: "teachings-math-2008-vector-calculus",
+          title: 'Math 2008: Vector Calculus',
+          description: "Vector calculus at Fordham University.",
+          section: "Teachings",handler: () => {
+              window.location.href = "/teachings/fordham-math-2008-fall-2026/";
             },},{id: "teachings-math-233-calculus-of-functions-of-several-variables",
           title: 'MATH 233: Calculus of Functions of Several Variables',
           description: "Graduate Teaching Assistant for multivariable calculus at UNC Chapel Hill.",
