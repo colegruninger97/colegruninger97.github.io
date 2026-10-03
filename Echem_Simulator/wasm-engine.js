@@ -2,6 +2,7 @@
   "use strict";
 
   const scriptBase = new URL(".", document.currentScript.src);
+  const assetVersion = new URL(document.currentScript.src).search;
   const supportedIntegrators = ["be_fe", "trap_ab2", "bdf1", "bdf2"];
   const supportedForwardSolvers = ["adaptive", "adaptive_bdf2", ...supportedIntegrators];
 
@@ -14,7 +15,7 @@
 
     ensureWorker() {
       if (this.worker) return;
-      this.worker = new Worker(new URL("wasm-worker.js", scriptBase), {type: "module"});
+      this.worker = new Worker(new URL(`wasm-worker.js${assetVersion}`, scriptBase), {type: "module"});
       this.worker.addEventListener("message", event => {
         const message = event.data || {};
         const request = this.pending.get(message.id);
@@ -89,7 +90,7 @@
         D: diffusion,
         fit_D: false
       });
-      const participant = name => ({species: name, stoich: 1});
+      const participant = (name, stoich = 1) => ({species: name, stoich});
       const parameter = value => ({value, fit: false});
       const electronTransfer = (label, oxidized, reduced, E0, k0) => ({
         label,
@@ -107,8 +108,8 @@
       const massAction = (label, reactants, products, rate) => ({
         label,
         type: "bulk_mass_action",
-        reactants: reactants.map(participant),
-        products: products.map(participant),
+        reactants: reactants.map(name=>participant(name)),
+        products: products.map(name=>participant(name)),
         parameters: {k: parameter(rate)},
         formula: ""
       });
@@ -297,6 +298,7 @@
 
     supportsCustomSimulation(payload) {
       if(payload?.preset!=="custom"||!this.supportsCustomMechanism(payload?.custom_model))return false;
+      if(payload?.experiment_type==="chronoamperometry"&&["adaptive","adaptive_bdf2","pnp"].includes(payload?.solver))return false;
       if(payload?.solver==="pnp")return payload.custom_model.species.every(species=>species.phase==="solution")
         &&payload.custom_model.reactions.every(reaction=>["bulk_mass_action","custom_bulk_rate","solution_electron"].includes(reaction.type));
       if(!supportedForwardSolvers.includes(payload?.solver))return false;
@@ -325,7 +327,7 @@
 
     supportsCustomFit(payload) {
       const model = payload?.custom_model;
-      const fittedSpecies = Boolean(payload?.shared_diffusion?.fit)||model?.species?.some(species => species?.fit_D);
+      const fittedSpecies = Boolean(payload?.shared_diffusion?.fit)||Boolean(model?.shared_electron_transfer?.fit)||model?.species?.some(species => species?.fit_D||species?.fit_initial);
       const fittedReaction = model?.reactions?.some(reaction =>
         Object.entries(reaction?.parameters || {}).some(([name, parameter]) =>
           parameter?.fit && !(["solution_electron","surface_electron","electroadsorption"].includes(reaction?.type) && name === "n")));

@@ -2,8 +2,10 @@ let enginePromise;
 
 async function engine() {
   if (!enginePromise) {
-    enginePromise = import("./wasm/pkg/electrochem_wasm.js").then(async module => {
-      await module.default();
+    const version = new URL(self.location.href).search;
+    enginePromise = import(`./wasm/pkg/electrochem_wasm.js${version}`).then(async module => {
+      const binary = new URL(`./wasm/pkg/electrochem_wasm_bg.wasm${version}`, self.location.href);
+      await module.default({module_or_path: binary});
       return module;
     });
   }

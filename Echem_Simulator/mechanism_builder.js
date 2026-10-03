@@ -193,7 +193,7 @@ function syncCustomParameters(reaction) {
     const previous=reaction.parameters?.[name];
     if(previous)inferred[name]={...parameter,fit:Boolean(previous.fit),
       lower:Number(previous.lower??parameter.lower),upper:Number(previous.upper??parameter.upper),
-      transform:previous.transform||parameter.transform};
+      transform:previous.transform||parameter.transform,...(previous.unit?{unit:previous.unit}:{})};
   }
   reaction.parameters=inferred;
   return inferred;
@@ -203,7 +203,8 @@ function serializeCustomModel() {
   const species=customMechanism.species.map((s,index)=>{
     if(!["solution","surface"].includes(s.phase))throw new Error(`Species ${index+1}: choose whether it is in solution or surface-bound.`);
     return {name:String(s.name).trim(),phase:s.phase,charge:Math.trunc(Number(s.charge||0)),initial:+s.initial,D:s.phase==="surface"?0:+s.D,
-      fit_D:s.phase==="solution"&&Boolean(s.fit_D),D_lower:+(s.D_lower||1e-9),D_upper:+(s.D_upper||1e-3)};
+      fit_D:s.phase==="solution"&&Boolean(s.fit_D),D_lower:+(s.D_lower||1e-9),D_upper:+(s.D_upper||1e-3),
+      fit_initial:s.phase==="surface"&&Boolean(s.fit_initial),initial_lower:s.initial_lower??1e-20,initial_upper:s.initial_upper??1e-5};
   });
   const reactions=customMechanism.reactions.map((r,index)=>{
     if(!r.type)throw new Error(`Reaction ${index+1}: enter reactants and products, then choose one of the compatible reaction types.`);
@@ -229,7 +230,9 @@ function serializeCustomModel() {
     }
     if(film.electronic_behavior==="insulating"&&reactions.some(reaction=>reaction.interface==="film"))throw new Error("An insulating film cannot host electron transfer. Assign those reactions to the bare electrode or choose an ideally conducting film.");
   }else reactions.forEach(reaction=>{reaction.interface="bare";});
-  return {name:customMechanism.name||"Custom mechanism",species,reactions,film};
+  const shared_electron_transfer=customMechanism.shared_electron_transfer?structuredClone(customMechanism.shared_electron_transfer):null;
+  if(shared_electron_transfer)reactions.filter(r=>r.type==="solution_electron").forEach(r=>{r.parameters.k0.value=shared_electron_transfer.value;r.parameters.k0.fit=false;});
+  return {name:customMechanism.name||"Custom mechanism",species,reactions,film,shared_electron_transfer};
 }
 
 function hydrateImportedReaction(rawReaction,index,type=rawReaction.type||"bulk_mass_action") {
@@ -269,11 +272,14 @@ function hydrateCustomModel(raw) {
   if(invalidPhase)throw new Error(`Species “${invalidPhase.name||"unnamed"}” has an unsupported phase.`);
   const unsupportedReaction=raw.reactions.find(reaction=>!Object.prototype.hasOwnProperty.call(reactionTypeLabels,reaction.type||"bulk_mass_action"));
   if(unsupportedReaction)throw new Error(`Reaction “${unsupportedReaction.label||"unnamed"}” uses an unsupported surface reaction type.`);
+  if(typeof markForwardSetupChanged==="function")markForwardSetupChanged();
   const rawFilm=raw.film||null;
+  if(typeof invalidateInference==="function")invalidateInference("A different reaction setup was loaded. Fit it to the current data before analyzing uncertainty.");
   customMechanism={name:raw.name||"Imported mechanism",
+    shared_electron_transfer:raw.shared_electron_transfer?structuredClone(raw.shared_electron_transfer):null,
     film:rawFilm?{electronic_behavior:rawFilm.electronic_behavior||"insulating",coverage_mode:rawFilm.coverage_mode||"surface_species",
       fixed_coverage:Number(rawFilm.fixed_coverage||0),coverage_species:[...(rawFilm.coverage_species||[])],monolayer_capacity:Number(rawFilm.monolayer_capacity||1e-10)}:null,
-    species:raw.species.map(s=>({name:s.name||"Species",phase:s.phase||"solution",charge:Math.trunc(Number(s.charge||0)),initial:Number(s.initial||0),D:s.phase==="surface"?0:Number(s.D||0),fit_D:s.phase==="solution"&&Boolean(s.fit_D),D_lower:Number(s.D_lower||1e-9),D_upper:Number(s.D_upper||1e-3)})),
+    species:raw.species.map(s=>({name:s.name||"Species",phase:s.phase||"solution",charge:Math.trunc(Number(s.charge||0)),initial:Number(s.initial||0),D:s.phase==="surface"?0:Number(s.D||0),fit_D:s.phase==="solution"&&Boolean(s.fit_D),D_lower:Number(s.D_lower||1e-9),D_upper:Number(s.D_upper||1e-3),fit_initial:s.phase==="surface"&&Boolean(s.fit_initial),initial_lower:s.initial_lower??1e-20,initial_upper:s.initial_upper??1e-5})),
     reactions:hydrateImportedReactions(raw.reactions)};
   customMechanismRevision+=1;
   renderCustomMechanism();
@@ -281,6 +287,13 @@ function hydrateCustomModel(raw) {
 }
 
 function markMechanismChanged() {
+  const linked=customMechanism.reactions.filter(reaction=>reaction.type==="solution_electron");
+  if(customMechanism.shared_electron_transfer&&linked.length<2){
+    linked.forEach(reaction=>reaction.parameters.k0={...customMechanism.shared_electron_transfer});
+    customMechanism.shared_electron_transfer=null;
+  }
+  if(typeof markForwardSetupChanged==="function")markForwardSetupChanged();
+  if(typeof invalidateInference==="function")invalidateInference("Reaction setup changed. Refit the current mechanism before analyzing uncertainty.");
   customMechanismRevision+=1;
   currentPreset="custom";
   $("#preset-select").value="custom";
@@ -296,6 +309,7 @@ function markMechanismChanged() {
 const pnpReactionTypes=new Set(["bulk_mass_action","solution_electron","custom_bulk_rate"]);
 
 function pnpCompatibilityIssue() {
+  if($("#experiment-type")?.value==="chronoamperometry")return "PNP is not yet available for potential-step programs.";
   if(customMechanism.species.some(species=>!["solution","surface"].includes(species.phase)))return "Choose a phase for every species before selecting PNP.";
   if(customMechanism.film)return "PNP is unavailable while an electrode film is enabled.";
   if(customMechanism.species.some(species=>species.phase==="surface"))return "PNP is unavailable while the setup contains surface species.";
@@ -333,12 +347,18 @@ function syncSimulationSolverAvailability() {
   if(!solver)return;
   const nonlinearSurface=Boolean(customMechanism.film)||customMechanism.reactions.some(reaction=>
     ["adsorption","desorption","electroadsorption","surface_mass_action","custom_surface_rate"].includes(reaction.type));
+  const chrono=$("#experiment-type")?.value==="chronoamperometry";
+  for(const value of ["adaptive","adaptive_bdf2"]){
+    const option=solver.querySelector(`option[value="${value}"]`);
+    option.disabled=chrono;
+    option.title=chrono?"Potential-step programs currently use fixed-step integration.":"";
+  }
   for(const value of ["be_fe","trap_ab2"]){
     const option=solver.querySelector(`option[value="${value}"]`);
     option.disabled=nonlinearSurface;
     option.title=nonlinearSurface?"This surface model requires a fully implicit solver.":"";
   }
-  if(nonlinearSurface&&["be_fe","trap_ab2"].includes(solver.value))solver.value="bdf2";
+  if((nonlinearSurface&&["be_fe","trap_ab2"].includes(solver.value))||(chrono&&["adaptive","adaptive_bdf2"].includes(solver.value)))solver.value="bdf2";
   if(typeof syncSimulationSolverNote==="function")syncSimulationSolverNote();
 }
 
@@ -466,7 +486,7 @@ function renderBuilderReactions() {
   $$('[data-builder-reaction-key="reactantsText"], [data-builder-reaction-key="productsText"]').forEach(input=>input.addEventListener("change",renderBuilderReactions));
   $$('[data-builder-reaction-type]').forEach(select=>select.addEventListener("change",()=>{const r=customMechanism.reactions[+select.dataset.builderReactionType];r.type=select.value;r.formula=select.value.startsWith("custom_")?"k*"+(customMechanism.species[0]?.name||"A"):"";r.parameterText=select.value.startsWith("custom_")?"k=1":"";r.parameters=select.value.startsWith("custom_")?inferCustomParameters(r.parameterText):parametersForType(select.value);r.blockingSpecies=[];r.interface="bare";markMechanismChanged();renderBuilderReactions();}));
   $$('[data-builder-reaction-interface]').forEach(select=>select.addEventListener("change",()=>{customMechanism.reactions[+select.dataset.builderReactionInterface].interface=select.value;markMechanismChanged();}));
-  $$('[data-builder-param]').forEach(input=>input.addEventListener("input",()=>{const reaction=customMechanism.reactions[+input.dataset.builderParam],p=reaction.parameters[input.dataset.builderParamName];p[input.dataset.builderParamKey]=+input.value;markMechanismChanged();}));
+  $$('[data-builder-param]').forEach(input=>input.addEventListener("input",()=>{const reaction=customMechanism.reactions[+input.dataset.builderParam],p=reaction.parameters[input.dataset.builderParamName];p[input.dataset.builderParamKey]=+input.value;if(customMechanism.shared_electron_transfer&&reaction.type==="solution_electron"&&input.dataset.builderParamName==="k0"){customMechanism.shared_electron_transfer.value=+input.value;customMechanism.reactions.forEach((r,index)=>{if(r.type==="solution_electron"){r.parameters.k0.value=+input.value;const field=$(`[data-builder-param="${index}"][data-builder-param-name="k0"]`);if(field)field.value=input.value;}});}markMechanismChanged();}));
   $$('[data-builder-site-occupant]').forEach(input=>input.addEventListener("change",()=>{const index=+input.dataset.builderSiteOccupant;customMechanism.reactions[index].blockingSpecies=$$(`[data-builder-site-occupant="${index}"]:checked`).map(checkbox=>checkbox.value);markMechanismChanged();}));
   $$('[data-builder-reaction-key="parameterText"]').forEach(input=>input.addEventListener("change",()=>{const reaction=customMechanism.reactions[+input.dataset.builderReaction];syncCustomParameters(reaction);markMechanismChanged();renderBuilderReactions();}));
   $$('[data-builder-remove-reaction]').forEach(button=>button.addEventListener("click",()=>{customMechanism.reactions.splice(+button.dataset.builderRemoveReaction,1);markMechanismChanged();renderBuilderReactions();}));
@@ -475,26 +495,35 @@ function renderBuilderReactions() {
 }
 
 function renderCustomMechanism() {
+  $("#builder-shared-rate-note").hidden=!customMechanism.shared_electron_transfer;
   renderBuilderSpecies(); renderBuilderReactions();
   if(typeof renderVoltammetricRateOptions==="function")renderVoltammetricRateOptions();
 }
 
 function customFitParameterEntries() {
   const model=serializeCustomModel(),entries=[];
+  if(model.shared_electron_transfer)entries.push({id:"shared_k0",label:"shared solution electron-transfer rate",unit:"cm s⁻¹",...model.shared_electron_transfer});
+  model.species.forEach((s,index)=>{if(s.phase==="surface")entries.push({id:`s${index+1}_Gamma0`,label:`${s.name} initial surface coverage`,value:s.initial,unit:"mol cm⁻²",fit:s.fit_initial,lower:s.initial_lower,upper:s.initial_upper,transform:"log",advanced:true});});
   model.species.forEach((species,index)=>{if(species.phase==="solution")entries.push({id:`s${index+1}_D`,label:`${species.name} diffusion coefficient`,value:species.D,unit:"cm² s⁻¹",fit:species.fit_D,lower:species.D_lower,upper:species.D_upper,transform:"log",advanced:true});});
   model.reactions.forEach((reaction,index)=>Object.entries(reaction.parameters).forEach(([name,parameter])=>{
+    if(model.shared_electron_transfer&&reaction.type==="solution_electron"&&name==="k0")return;
     if(["solution_electron","surface_electron","electroadsorption"].includes(reaction.type)&&name==="n")return;
     const meta=reactionParameterMeta[reaction.type]?.[name];
-    entries.push({id:`r${index+1}_${name}`,label:`${reaction.label||`Reaction ${index+1}`} · ${name}`,value:parameter.value,unit:meta?.[5]||"model units",fit:Boolean(parameter.fit),lower:Number(parameter.lower??meta?.[2]??-1e12),upper:Number(parameter.upper??meta?.[3]??1e12),transform:parameter.transform||meta?.[4]||"identity",advanced:false});
+    entries.push({id:`r${index+1}_${name}`,label:`${reaction.label||`Reaction ${index+1}`} · ${name}`,value:parameter.value,unit:parameter.unit||meta?.[5]||"model units",fit:Boolean(parameter.fit),lower:Number(parameter.lower??meta?.[2]??-1e12),upper:Number(parameter.upper??meta?.[3]??1e12),transform:parameter.transform||meta?.[4]||"identity",advanced:false});
   }));
   return entries;
 }
 
 function applyCustomFitParameter(model,id,settings) {
+  if(id==="shared_k0"){
+    model.shared_electron_transfer=structuredClone(settings);
+    model.reactions.filter(r=>r.type==="solution_electron").forEach(r=>{r.parameters.k0.value=Number(settings.value);r.parameters.k0.fit=false;});return;
+  }
   const match=String(id).match(/^([sr])(\d+)_(.+)$/);if(!match)return;
   const index=Number(match[2])-1;
   if(match[1]==="s"){
     const species=model.species[index];if(!species)return;
+    if(match[3]==="Gamma0"){species.fit_initial=Boolean(settings.fit);species.initial=Number(settings.value);species.initial_lower=Number(settings.lower);species.initial_upper=Number(settings.upper);return;}
     species.fit_D=Boolean(settings.fit);species.D=Number(settings.value);
     species.D_lower=Number(settings.lower);species.D_upper=Number(settings.upper);
   }else{
@@ -514,8 +543,9 @@ function renderBuilderSummary(result) {
 
 async function validateBuilder(model=serializeCustomModel()) {
   setBuilderError();
-  try{if(!window.electrochemBrowserEngine?.supportsCustomMechanism(model))throw new Error("The browser supports solution and surface species with homogeneous, electron-transfer, adsorption, desorption, electron-transfer adsorption, and heterogeneous rate laws.");const result=await window.electrochemBrowserEngine.validateCustom(model);renderBuilderSummary(result);return result;}
-  catch(error){setBuilderError(error.message);throw error;}
+  const revision=customMechanismRevision,forward=simulationRevision;
+  try{if(!window.electrochemBrowserEngine?.supportsCustomMechanism(model))throw new Error("The browser supports solution and surface species with homogeneous, electron-transfer, adsorption, desorption, electron-transfer adsorption, and heterogeneous rate laws.");const result=await window.electrochemBrowserEngine.validateCustom(model);if(revision===customMechanismRevision&&forward===simulationRevision)renderBuilderSummary(result);return result;}
+  catch(error){if(revision===customMechanismRevision&&forward===simulationRevision)setBuilderError(error.message);throw error;}
 }
 
 function exportBuilder(){try{const blob=new Blob([JSON.stringify(serializeCustomModel(),null,2)],{type:"application/json"});const link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download=`${(customMechanism.name||"mechanism").replace(/[^A-Za-z0-9_-]+/g,"_")}.json`;link.click();URL.revokeObjectURL(link.href);}catch(error){setBuilderError(error.message);}}
