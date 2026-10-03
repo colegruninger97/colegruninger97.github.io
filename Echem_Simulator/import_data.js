@@ -41,6 +41,18 @@
     return slopes.length ? slopes[Math.floor(slopes.length / 2)] : 0.1;
   }
 
+  function inferExperimentType(time, potential) {
+    const changes=[];
+    for(let index=1;index<time.length;index++){
+      if(time[index]>time[index-1])changes.push(Math.abs(potential[index]-potential[index-1]));
+    }
+    if(!changes.length)return "cyclic_voltammetry";
+    const dominant=Math.max(...changes),dominantIndex=changes.indexOf(dominant),span=Math.max(...potential)-Math.min(...potential);
+    if(!(span>1e-6)||dominant<span*0.35)return "cyclic_voltammetry";
+    const offStep=changes.reduce((sum,value,index)=>sum+(Math.abs(index-dominantIndex)<=2?0:value),0);
+    return offStep<=0.25*dominant?"chronoamperometry":"cyclic_voltammetry";
+  }
+
   function inferredUnit(header, kind) {
     const normalized = String(header).toLowerCase().replace(/μ/g, "u");
     if (kind === "time") {
@@ -106,7 +118,8 @@
     dataset.time = time;
     dataset.potential = potential;
     dataset.current = current;
-    dataset.scan_rate = inferScanRate(time, potential);
+    if(!dataset.experiment_type_locked)dataset.experiment_type=inferExperimentType(time,potential);
+    dataset.scan_rate = dataset.experiment_type==="chronoamperometry"?0:inferScanRate(time, potential);
     const inferred = dataset.raw_import.inferred_columns;
     dataset.preprocessing = {
       schema_version: 1,
@@ -196,6 +209,7 @@
     unitScales,
     splitCSVLine,
     inferScanRate,
+    inferExperimentType,
     inferredUnit,
     inferredColumn,
     normalizeImportedDataset,

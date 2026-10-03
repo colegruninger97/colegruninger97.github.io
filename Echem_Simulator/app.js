@@ -69,6 +69,23 @@ let simulationRun = 0;
 let savedTraceSequence = 0;
 let datasetSequence = 0;
 let experimentalDatasets = [];
+let simulationRevision = 0;
+let simulationRequest = 0;
+
+function markForwardSetupChanged() {
+  simulationRevision+=1;
+  renderSimulationContext();
+}
+
+function renderSimulationContext() {
+  const output=$("#simulation-context");
+  if(!output)return;
+  if(!latestResult){output.textContent="Run a simulation to calculate the current for this setup.";return;}
+  const input=latestResult._simulationInput;
+  if(!input){output.textContent="This trace has no captured setup. Simulate again before using it as a reference.";return;}
+  const experiment=latestResult.experiment_type==="chronoamperometry"?"potential step":`${input.scan_rate} V s⁻¹`;
+  output.textContent=`Displayed run ${latestResult._runToken}: ${input.custom_model.name} · ${experiment} · ${input.temperature} K. ${latestResult._setupRevision===simulationRevision?"Matches the current setup.":"The setup has changed; simulate again to update this trace."}`;
+}
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -114,6 +131,44 @@ function payloadFromForm() {
     payload[input.dataset.key] = input.tagName === "SELECT" ? input.value : Number(input.value);
   });
   return payload;
+}
+
+function activeExperimentType() {
+  return $("#experiment-type")?.value||"cyclic_voltammetry";
+}
+
+function isChronoamperometry() {
+  return activeExperimentType()==="chronoamperometry";
+}
+
+function syncExperimentControls() {
+  const chrono=isChronoamperometry();
+  for(const id of ["#cv-initial-potential-field","#cv-switching-potential-field","#cv-scan-rate-field"])$(id).hidden=chrono;
+  for(const id of ["#chrono-initial-potential-field","#chrono-step-potential-field","#chrono-quiet-time-field","#chrono-duration-field"])$(id).hidden=!chrono;
+  for(const value of ["adaptive","adaptive_bdf2"]){
+    const option=$(`#simulation-solver option[value="${value}"]`);
+    option.disabled=chrono;
+    option.title=chrono?"Potential-step programs currently use a fixed-step integrator.":"";
+  }
+  if(chrono&&["adaptive","adaptive_bdf2"].includes($("#simulation-solver").value))$("#simulation-solver").value="bdf2";
+  if(chrono&&$("#builder-transport")?.value==="pnp")$("#builder-transport").value="standard";
+  if(typeof syncTransportControls==="function")syncTransportControls();
+  if(typeof syncSimulationSolverAvailability==="function")syncSimulationSolverAvailability();
+  $("#run-button .button-label").textContent=chrono?"Simulate current transient":"Simulate voltammogram";
+  syncDisplayedExperimentLabels();
+  $("#electrolyte-screen").hidden=chrono||$("#builder-transport")?.value==="pnp";
+  syncSimulationSolverNote();
+}
+
+function syncDisplayedExperimentLabels() {
+  const chrono=(latestResult?.experiment_type||activeExperimentType())==="chronoamperometry";
+  $("#result-heading").textContent=chrono?"Chronoamperogram":"Cyclic voltammogram";
+  $("#peak-coordinate-label").textContent=chrono?"Time of largest |current|":"Peak potential";
+  $("#cv-chart").setAttribute("aria-label",chrono?"Simulated current versus time":"Simulated current versus potential");
+  $(".plot-convention").setAttribute("aria-label",chrono?"Current-sign convention":"Voltammogram plotting convention");
+  $("#plot-convention-note").textContent=chrono
+    ? `${activeVoltammogramConvention().label} current-sign convention; time increases from left to right.`
+    : activeVoltammogramConvention().note;
 }
 
 function syncSimulationSolverNote() {
@@ -172,7 +227,9 @@ function selectVoltammogramConvention(name) {
     button.classList.toggle("active", selected);
     button.setAttribute("aria-pressed", String(selected));
   });
-  $("#plot-convention-note").textContent = activeVoltammogramConvention().note;
+  $("#plot-convention-note").textContent = (latestResult?.experiment_type||activeExperimentType())==="chronoamperometry"
+    ? `${activeVoltammogramConvention().label} current-sign convention; time increases from left to right.`
+    : activeVoltammogramConvention().note;
   if (latestResult) {
     drawChart(latestResult);
     updatePeakCurrentDisplay();
@@ -181,11 +238,13 @@ function selectVoltammogramConvention(name) {
 }
 
 function chartSeries(result) {
-  const series=result.series.map((item,index)=>({name:item.name,current:item.current.map(displayedCurrent),potential:result.potential,
-    color:colors[index%colors.length],saved:false}));
+  const experiment=result.experiment_type||"cyclic_voltammetry";
+  const coordinate=experiment==="chronoamperometry"?result.time:result.potential;
+  const series=result.series.map((item,index)=>({name:item.name,current:item.current.map(displayedCurrent),coordinate,
+    experiment_type:experiment,color:colors[index%colors.length],saved:false}));
   if($("#show-saved-traces")?.checked){
     const savedColors=["#7f8d96","#9aa7af","#6f8290","#adb8be","#879ba8"];
-    savedTraces.filter(trace=>trace.runToken!==result._runToken).forEach((trace,index)=>series.push({...trace,current:trace.current.map(displayedCurrent),color:savedColors[index%savedColors.length],saved:true}));
+    savedTraces.filter(trace=>trace.runToken!==result._runToken&&trace.experiment_type===experiment).forEach((trace,index)=>series.push({...trace,current:trace.current.map(displayedCurrent),color:savedColors[index%savedColors.length],saved:true}));
   }
   return series;
 }
@@ -204,21 +263,23 @@ function drawChart(result) {
   const visibleSeries=chartSeries(result);
   let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
   for(const series of visibleSeries){
-    for(const x of series.potential){xmin=Math.min(xmin,x);xmax=Math.max(xmax,x);}
+    for(const x of series.coordinate){xmin=Math.min(xmin,x);xmax=Math.max(xmax,x);}
     for(const y of series.current){ymin=Math.min(ymin,y);ymax=Math.max(ymax,y);}
   }
   const yspan = Math.max(ymax-ymin, Math.max(Math.abs(ymin),Math.abs(ymax))*0.1, 1e-12);
   ymin -= .08*yspan; ymax += .08*yspan;
   const unit = currentUnit(Math.max(Math.abs(ymin), Math.abs(ymax)));
-  const reversePotentialAxis = activeVoltammogramConvention().reversePotentialAxis;
-  const xpx = x => pad.left + (reversePotentialAxis ? (xmax-x) : (x-xmin))/(xmax-xmin)*plotW;
+  const chrono=(result.experiment_type||"cyclic_voltammetry")==="chronoamperometry";
+  const reversePotentialAxis = !chrono&&activeVoltammogramConvention().reversePotentialAxis;
+  const xspan=Math.max(xmax-xmin,1e-12);
+  const xpx = x => pad.left + (reversePotentialAxis ? (xmax-x) : (x-xmin))/xspan*plotW;
   const ypx = y => pad.top + (ymax-y)/(ymax-ymin)*plotH;
 
   ctx.clearRect(0,0,width,height);
   ctx.fillStyle = "#fbfcfb"; ctx.fillRect(0,0,width,height);
   ctx.font = "11px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
   for (let i=0;i<=5;i++) {
-    const x = reversePotentialAxis ? xmax-(xmax-xmin)*i/5 : xmin+(xmax-xmin)*i/5, px = xpx(x);
+    const x = reversePotentialAxis ? xmax-xspan*i/5 : xmin+xspan*i/5, px = xpx(x);
     ctx.strokeStyle = "#e2e8e5"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(px,pad.top); ctx.lineTo(px,pad.top+plotH); ctx.stroke();
     ctx.fillStyle = "#60747b"; ctx.fillText(x.toFixed(2),px,pad.top+plotH+10);
@@ -236,23 +297,31 @@ function drawChart(result) {
     ctx.strokeStyle=series.color;ctx.lineWidth=series.saved?1.55:(index===0?2.4:1.8);
     ctx.setLineDash(series.saved?[6,4]:[]);ctx.globalAlpha=series.saved?.85:1;
     ctx.beginPath();
-    series.current.forEach((y,i)=>i?ctx.lineTo(xpx(series.potential[i]),ypx(y)):ctx.moveTo(xpx(series.potential[i]),ypx(y)));
+    series.current.forEach((y,i)=>i?ctx.lineTo(xpx(series.coordinate[i]),ypx(y)):ctx.moveTo(xpx(series.coordinate[i]),ypx(y)));
     ctx.stroke();
   });
   ctx.setLineDash([]);ctx.globalAlpha=1;
   ctx.fillStyle = "#304b53"; ctx.font = "12px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-  ctx.fillText("Potential vs reference (V)", pad.left+plotW/2, height-8);
+  ctx.fillText(chrono?"Time (s)":"Potential vs reference (V)", pad.left+plotW/2, height-8);
   ctx.save(); ctx.translate(16,pad.top+plotH/2); ctx.rotate(-Math.PI/2); ctx.fillText(`Current (${unit.label})`,0,0); ctx.restore();
-  $("#legend").innerHTML=visibleSeries.map(series=>`<span class="legend-item"><i class="legend-line ${series.saved?"saved":""}" style="background:${series.color};color:${series.color}"></i>${series.name}</span>`).join("");
+  $("#legend").innerHTML=visibleSeries.map(series=>`<span class="legend-item"><i class="legend-line ${series.saved?"saved":""}" style="background:${series.color};color:${series.color}"></i>${escapeHTML(series.name)}</span>`).join("");
 }
 
 function displayResult(result, simulationInput = null) {
   result._runToken=++simulationRun;
   result._simulationInput=simulationInput;
+  result._setupRevision=simulationRevision;
+  result.experiment_type=simulationInput?.experiment_type||"cyclic_voltammetry";
   latestResult = result;
+  syncDisplayedExperimentLabels();
+  renderSimulationContext();
   drawChart(result);
   updatePeakCurrentDisplay();
-  $("#peak-potential").textContent = `${result.summary.peak_potential.toFixed(4)} V`;
+  if(result.experiment_type==="chronoamperometry"){
+    const trace=result.series[0]?.current||[];
+    const index=trace.reduce((best,value,position)=>Math.abs(value)>Math.abs(trace[best]||0)?position:best,0);
+    $("#peak-potential").textContent=`${Number(result.time[index]||0).toPrecision(4)} s`;
+  }else $("#peak-potential").textContent = `${result.summary.peak_potential.toFixed(4)} V`;
   updateComparisonMetric();
   $("#solver-time").textContent = `${result.elapsed_seconds.toFixed(3)} s`;
   $("#download-button").disabled = false;
@@ -280,14 +349,14 @@ function displayResult(result, simulationInput = null) {
 function renderInitialTransientNote(result,simulationInput) {
   const note=$("#initial-transient-note"),current=result?.series?.[0]?.current||[],time=result?.time||[];
   const messages=[];
-  if(result?.resolution?.adaptive&&current.length>=20&&time.length===current.length){
+  if(simulationInput?.experiment_type!=="chronoamperometry"&&result?.resolution?.adaptive&&current.length>=20&&time.length===current.length){
     const skip=Math.min(10,Math.max(3,Math.floor(current.length*0.01)));
     const initialPeak=current.slice(0,skip).reduce((peak,value)=>Math.max(peak,Math.abs(value)),0);
     const laterPeak=current.slice(skip).reduce((peak,value)=>Math.max(peak,Math.abs(value)),0);
     const totalTime=Number(time.at(-1)||0);
     if(initialPeak>1.1*laterPeak&&Number(time[0])<totalTime*1e-4)messages.push("Initial-condition transient: the starting species amounts do not exactly satisfy electrode equilibrium at Ei, and the adaptive solver is resolving the rapid relaxation. This is not a timestep instability. Move Ei farther from the redox wave or choose starting oxidation states and surface coverages consistent with Ei if the experiment was equilibrated before the scan.");
   }
-  if(Number(simulationInput?.double_layer_capacitance)>0)messages.push("Ideal-waveform charging: the triangular scan changes slope instantaneously at the start and switching potential, so an ideal double-layer capacitor produces a current step there. Finite uncompensated resistance smooths that step through the RC response.");
+  if(Number(simulationInput?.double_layer_capacitance)>0)messages.push(simulationInput?.experiment_type==="chronoamperometry"?"Potential-step charging: an ideal double-layer capacitor responds sharply when the potential changes. Finite uncompensated resistance smooths this through the RC response.":"Ideal-waveform charging: the triangular scan changes slope instantaneously at the start and switching potential, so an ideal double-layer capacitor produces a current step there. Finite uncompensated resistance smooths that step through the RC response.");
   note.textContent=messages.join(" ");note.hidden=!messages.length;
 }
 
@@ -309,7 +378,7 @@ function updateComparisonMetric(){
     $("#enhancement").textContent=`${Number(latestResult.debye_length).toExponential(3)} cm`;
     return;
   }
-  const comparison=[...savedTraces].reverse().find(trace=>trace.runToken!==latestResult._runToken);
+  const comparison=[...savedTraces].reverse().find(trace=>trace.runToken!==latestResult._runToken&&trace.experiment_type===latestResult.experiment_type);
   if(!comparison){$("#enhancement").textContent="—";return;}
   const currentPeak=latestResult.series[0].current.reduce((peak,value)=>Math.max(peak,Math.abs(value)),0);
   const savedPeak=comparison.current.reduce((peak,value)=>Math.max(peak,Math.abs(value)),0);
@@ -319,7 +388,7 @@ function updateComparisonMetric(){
 function renderSavedTraces(){
   const bar=$("#saved-trace-bar");bar.hidden=savedTraces.length===0;
   $("#save-trace-button").disabled=!latestResult||savedTraces.some(trace=>trace.runToken===latestResult._runToken);
-  $("#saved-trace-list").innerHTML=savedTraces.map(trace=>`<span class="saved-trace-chip">${trace.name}<button type="button" data-remove-saved-trace="${trace.id}" aria-label="Remove ${trace.name}">×</button></span>`).join("");
+  $("#saved-trace-list").innerHTML=savedTraces.map(trace=>`<span class="saved-trace-chip">${escapeHTML(trace.name)}<button type="button" data-remove-saved-trace="${trace.id}" aria-label="Remove ${escapeHTML(trace.name)}">×</button></span>`).join("");
   $$('[data-remove-saved-trace]').forEach(button=>button.addEventListener("click",()=>{savedTraces=savedTraces.filter(trace=>trace.id!==+button.dataset.removeSavedTrace);renderSavedTraces();if(latestResult)drawChart(latestResult);}));
   updateComparisonMetric();
 }
@@ -327,43 +396,53 @@ function renderSavedTraces(){
 function saveCurrentTrace(){
   if(!latestResult||!latestResult.series.length)return;
   const option=$(`#preset-select option[value="${latestResult.preset}"]`);
-  const template=latestResult.preset==="custom"?(customMechanism?.name||"Custom reaction setup"):option?.textContent.split(" — ")[0]||"Simulation";
+  const template=latestResult._simulationInput?.custom_model?.name||option?.textContent.split(" — ")[0]||"Simulation";
   const id=++savedTraceSequence;
-  savedTraces.push({id,name:`${template} · trace ${id}`,potential:[...latestResult.potential],
-    current:[...latestResult.series[0].current],runToken:latestResult._runToken});
+  const experiment=latestResult.experiment_type||"cyclic_voltammetry";
+  savedTraces.push({id,name:`${template} · trace ${id}`,coordinate:[...(experiment==="chronoamperometry"?latestResult.time:latestResult.potential)],experiment_type:experiment,
+    current:[...latestResult.series[0].current],runToken:latestResult._runToken,simulationInput:structuredClone(latestResult._simulationInput)});
   $("#save-trace-button").disabled=true;renderSavedTraces();drawChart(latestResult);
 }
 
 function clearSavedTraces(){savedTraces=[];renderSavedTraces();if(latestResult)drawChart(latestResult);}
 
+function captureSimulationInput() {
+  const payload={...payloadFromForm(),preset:"custom",solver:$("#simulation-solver").value,custom_model:serializeCustomModel(),experiment_type:activeExperimentType()};
+  if(payload.experiment_type==="chronoamperometry")Object.assign(payload,{chrono_initial_potential:Number($("#chrono-initial-potential").value),chrono_step_potential:Number($("#chrono-step-potential").value),chrono_quiet_time:Number($("#chrono-quiet-time").value),chrono_duration:Number($("#chrono-duration").value)});
+  if($("#builder-transport").value==="pnp")Object.assign(payload,{solver:"pnp",pnp_stern_capacitance:Number($("#builder-pnp-stern").value),pnp_pzc:Number($("#builder-pnp-pzc").value),pnp_relative_permittivity:Number($("#builder-pnp-permittivity").value)});
+  return structuredClone(payload);
+}
+
 async function runSimulation() {
   clearError(); setLoading(true);
+  const revision=simulationRevision,request=++simulationRequest;
+  const stillCurrent=()=>revision===simulationRevision&&request===simulationRequest;
   $("#initial-transient-note").hidden=true;
   $("#numerical-resolution-status").textContent="Selecting resolution for this mechanism…";
   try {
     if (!window.electrochemBrowserEngine) {
       throw new Error("The browser calculation engine did not load. Reload the page and try again.");
     }
-    const model=serializeCustomModel();
-    await validateBuilder(model);
-    const payload={...payloadFromForm(),preset:"custom",solver:$("#simulation-solver").value,custom_model:model};
-    if($("#builder-transport").value==="pnp"){
-      payload.solver="pnp";
-      payload.pnp_stern_capacitance=Number($("#builder-pnp-stern").value);
-      payload.pnp_pzc=Number($("#builder-pnp-pzc").value);
-      payload.pnp_relative_permittivity=Number($("#builder-pnp-permittivity").value);
-    }
-    if(!window.electrochemBrowserEngine.supportsCustomSimulation(payload))throw new Error("Choose transport physics compatible with the current reaction setup. PNP accepts solution species and homogeneous or solution electron-transfer steps.");
+    const payload=captureSimulationInput();
+    await validateBuilder(payload.custom_model);
+    if(!stillCurrent())return;
+    if(!window.electrochemBrowserEngine.supportsCustomSimulation(payload))throw new Error(isChronoamperometry()?"Potential-step simulation currently uses supported-electrolyte transport with a fixed-step solver.":"Choose transport physics compatible with the current reaction setup. PNP accepts solution species and homogeneous or solution electron-transfer steps.");
     const result = await window.electrochemBrowserEngine.simulateCustom(payload);
+    if(!stillCurrent())return;
     displayResult(result, payload);
     $("#interpretation-text").textContent=payload.solver==="pnp"?"This trace solves migration, diffusion, diffuse charge, the Stern layer, and Frumkin electron transfer together in Rust/WebAssembly.":"This trace was generated from the editable species, reactions, and rate laws shown above.";
   } catch (error) {
-    showError(error.message);
-    $("#numerical-resolution-status").textContent="No under-resolved simulation was run.";
+    if(stillCurrent()){showError(error.message);$("#numerical-resolution-status").textContent="The new simulation did not complete; any previous trace is retained.";}
   } finally {
-    setLoading(false);
+    if(request===simulationRequest){
+      setLoading(false);
+      if(revision!==simulationRevision){showError("The setup changed during calculation. Simulate again to use the new settings; the previous trace is retained.");$("#numerical-resolution-status").textContent="Changed setup: rerun required.";}
+    }
   }
 }
+
+document.addEventListener("input",event=>{if(event.target.closest?.("#view-simulate")&&!event.target.closest?.(".results-panel"))markForwardSetupChanged();});
+document.addEventListener("change",event=>{if(event.target.closest?.("#view-simulate")&&!event.target.closest?.(".results-panel"))markForwardSetupChanged();});
 
 function scientific(value, digits=4){
   return Number(value).toExponential(digits-1);
@@ -419,7 +498,8 @@ function downloadCSV() {
   const rows = [headers.join(",")];
   for (let i=0;i<latestResult.points;i++) rows.push([latestResult.time[i],latestResult.potential[i],...latestResult.series.map(s=>displayedCurrent(s.current[i])),...coverages.map(trace=>trace.coverage[i]),...(filmCoverage.length?[filmCoverage[i]]:[]),...(latestResult.debye_length?[displayedCurrent(latestResult.faradaic_current[i]),displayedCurrent(latestResult.charging_current[i]),latestResult.solution_potential[i+1][0],...pnpFields.map(field=>field.values[i+1][0])]:[])].join(","));
   const blob = new Blob([rows.join("\n")], {type:"text/csv"});
-  const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `${latestResult.preset}_voltammogram_${convention.filename}.csv`; link.click();
+  const responseName=latestResult.experiment_type==="chronoamperometry"?"chronoamperogram":"voltammogram";
+  const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `${latestResult.preset}_${responseName}_${convention.filename}.csv`; link.click();
   URL.revokeObjectURL(link.href);
 }
 
@@ -438,6 +518,7 @@ $$('[data-view-target]').forEach(button => {
   button.addEventListener("click", () => switchView(button.dataset.viewTarget));
 });
 $("#preset-select").addEventListener("change",event=>selectPreset(event.target.value));
+$("#experiment-type").addEventListener("change",syncExperimentControls);
 $("#simulation-solver").addEventListener("change",syncSimulationSolverNote);
 $("#run-button").addEventListener("click", runSimulation);
 $("#save-trace-button").addEventListener("click",saveCurrentTrace);
@@ -449,4 +530,5 @@ $("#electrolyte-check-button").addEventListener("click",screenSupportingElectrol
 $("#reset-button").addEventListener("click", () => { location.reload(); });
 window.addEventListener("resize", () => {if(latestResult)drawChart(latestResult);if(typeof latestBrowserFit!=="undefined"&&latestBrowserFit)drawFitCharts(latestBrowserFit);});
 checkEngine();
+syncExperimentControls();
 syncSimulationSolverNote();

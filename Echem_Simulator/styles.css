@@ -62,6 +62,13 @@ button { color: inherit; }
 .nav-item { gap: 0; }
 
 main { width: min(1380px, 100%); margin: 0 auto; padding: 27px clamp(22px,3vw,48px) 52px; }
+.inference-context { padding: 16px 20px; border-left: 4px solid var(--carolina-dark); background: var(--carolina-soft); color: var(--ink); font-size: 1rem; line-height: 1.55; overflow-wrap: anywhere; }
+.structured-species-card { padding: 16px; border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; background: var(--paper); }
+.structured-species-card .field > span, .structured-species-card input, .structured-species-card select { font-size: .875rem; }
+.structured-species-card .field { min-width: 0; }
+.structured-species-card .button { margin-top: 12px; }
+#candidate-preview .candidate-item { grid-template-columns: minmax(0,1fr); font-size: .875rem; padding: 12px 0; }
+#candidate-preview select { width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: white; font-size: .875rem; }
 .intro-row { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 18px; }
 .intro-row h2 { margin: 5px 0 7px; font-family: Georgia, "Times New Roman", serif; font-size: clamp(26px,3vw,36px); font-weight: 500; }
 .intro-row p:last-child { margin: 0; color: var(--muted); }

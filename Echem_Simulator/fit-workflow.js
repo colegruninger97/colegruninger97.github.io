@@ -8,6 +8,87 @@ let latestDataQualityReport = null;
 let customFitParameterState = {};
 let customFitParameterRevision = -1;
 let fitSharedDiffusionEnabled = false;
+let inferenceRevision = 0;
+let fitRequestSequence = 0;
+let uncertaintyBusy = false;
+let fitResultSequence = 0;
+
+function syncUncertaintyAvailability() {
+  for(const selector of ["#profile-button","#posterior-button","#known-input-button"]){
+    const button=$(selector);if(button)button.disabled=!latestBrowserUncertaintyTarget||uncertaintyBusy;
+  }
+}
+
+function invalidateInference(reason="The study changed. Fit the current data and reaction setup again.") {
+  inferenceRevision+=1;
+  latestBrowserFit=null;latestBrowserFitPayload=null;latestBrowserUncertaintyTarget=null;
+  latestDataQualityReport=null;dataQualitySequence+=1;
+  for(const selector of ["#fit-summary","#discovery-results","#uncertainty-results"]){
+    const output=$(selector);if(output){output.className="empty-state";output.textContent=reason;}
+  }
+  const parameter=$("#uncertainty-parameter");if(parameter)parameter.innerHTML="";
+  const context=$("#uncertainty-context");if(context)context.textContent="No fitted model selected. Complete a fit, then choose Analyze uncertainty.";
+  if(typeof knownInputMeasurements!=="undefined")knownInputMeasurements=[];
+  if(typeof renderKnownInputOptions==="function")renderKnownInputOptions();
+  if(typeof renderPosteriorPriorControls==="function")renderPosteriorPriorControls([]);
+  if(typeof updatePosteriorNoiseRecommendation==="function")updatePosteriorNoiseRecommendation(null);
+  for(const selector of ["#fit-error","#discovery-error","#uncertainty-error"]){const error=$(selector);if(error)error.hidden=true;}
+  syncUncertaintyAvailability();
+  if(typeof syncDiscoveryAvailability==="function")syncDiscoveryAvailability();
+}
+
+function setUncertaintyTarget(target,estimates,label) {
+  latestBrowserUncertaintyTarget={...structuredClone(target),revision:inferenceRevision,label};
+  if(typeof knownInputMeasurements!=="undefined")knownInputMeasurements=[];
+  $("#uncertainty-parameter").innerHTML=estimates.map(estimate=>`<option value="${escapeHTML(estimate.name)}">${escapeHTML(estimate.name)}</option>`).join("");
+  $("#uncertainty-context").textContent=label+". Uncertainty is conditional on this model and these experiments.";
+  $("#uncertainty-results").className="empty-state";
+  $("#uncertainty-results").textContent="Start with a profile to check which values the data can distinguish. Measured-input uncertainty can then account for independently measured conditions.";
+  if(typeof renderKnownInputOptions==="function")renderKnownInputOptions();
+  if(typeof renderPosteriorPriorControls==="function")renderPosteriorPriorControls(estimates);
+  if(typeof updatePosteriorNoiseRecommendation==="function")updatePosteriorNoiseRecommendation(target.fitResult||null);
+  syncUncertaintyAvailability();
+  if(typeof syncDiscoveryAvailability==="function")syncDiscoveryAvailability();
+}
+
+function uncertaintyTargetIsCurrent(target) {
+  return target===latestBrowserUncertaintyTarget&&target?.revision===inferenceRevision;
+}
+
+function selectFitForUncertainty(result,payload,label) {
+  if(result!==latestBrowserFit)return;
+  if(latestBrowserUncertaintyTarget?.kind!=="custom"||latestBrowserUncertaintyTarget.label!==label){
+    setUncertaintyTarget({kind:"custom",payload,fitResult:result},result.estimates,label);
+  }
+  switchView("uncertainty");
+}
+
+function requireSupportedInference() {
+  if($("#builder-transport")?.value==="pnp")throw new Error("PNP is available for simulation, but not parameter fitting or mechanism search yet. Choose supported-electrolyte transport only if that approximation is appropriate for your experiment.");
+}
+
+// Keep the fit's values AND its fitted/fixed choices when constructing another
+// inverse problem. Never write the estimates into the user's simulation editor.
+function payloadWithFittedEstimates(payload,result) {
+  const copy=structuredClone(payload);
+  for(const estimate of result.estimates){
+    if(estimate.name==="shared_k0"){copy.custom_model.shared_electron_transfer.value=estimate.value;copy.custom_model.reactions.filter(r=>r.type==="solution_electron").forEach(r=>r.parameters.k0.value=estimate.value);continue;}
+    const coverage=/^s(\d+)_Gamma0$/.exec(estimate.name);
+    if(coverage){copy.custom_model.species[Number(coverage[1])-1].initial=estimate.value;continue;}
+    if(estimate.name==="shared_D"&&copy.shared_diffusion){copy.shared_diffusion.value=estimate.value;continue;}
+    const diffusion=/^s(\d+)_D$/.exec(estimate.name),reaction=/^r(\d+)_(.+)$/.exec(estimate.name);
+    if(diffusion)copy.custom_model.species[Number(diffusion[1])-1].D=estimate.value;
+    if(reaction)copy.custom_model.reactions[Number(reaction[1])-1].parameters[reaction[2]].value=estimate.value;
+  }
+  return copy;
+}
+
+function currentRateSearchFit() {
+  requireSupportedInference();
+  const payload=latestBrowserFit&&latestBrowserFitPayload
+    ?payloadWithFittedEstimates(latestBrowserFitPayload,latestBrowserFit):customFitPayload();
+  return payload;
+}
 
 function fitSelectOptions(values,current) {
   return values.map(([value,label])=>`<option value="${value}" ${String(value)===String(current)?"selected":""}>${escapeHTML(label)}</option>`).join("");
@@ -47,7 +128,19 @@ function dataQualityHTML(report,index) {
   const errors=issues.filter(issue=>issue.severity==="error").length,warnings=issues.filter(issue=>issue.severity==="warning").length;
   const issueRows=issues.map(issue=>`<div class="model-warning"><strong>${issue.severity==="error"?"Data error":"Data review"}:</strong> ${escapeHTML(issue.message)}</div>`).join("");
   const status=errors?`${errors} error${errors===1?"":"s"}`:warnings?`${warnings} warning${warnings===1?"":"s"}`:"Preflight passed";
-  return `<div class="result-badges"><span class="result-badge ${errors||warnings?"":"success"}">${status}</span><span class="result-badge">Estimated ${fitNumber(metrics.estimated_scan_rate,4)} V s⁻¹</span><span class="result-badge">Largest gap ${fitNumber(metrics.maximum_gap_ratio,3)}× median</span></div>${issueRows}<details class="advanced-settings"><summary>Data preflight details</summary><div><table class="result-table"><tbody><tr><th>Duration</th><td>${fitNumber(metrics.duration,5)} s</td></tr><tr><th>Potential span</th><td>${fitNumber(metrics.potential_span,5)} V</td></tr><tr><th>Switching position</th><td>${(100*metrics.switching_fraction).toFixed(1)}%</td></tr><tr><th>Initial scan</th><td>${escapeHTML(metrics.initial_scan_direction)}</td></tr><tr><th>Duration mismatch</th><td>${(100*metrics.duration_relative_error).toFixed(2)}%</td></tr></tbody></table></div></details>`;
+  const chrono=metrics.experiment_type==="chronoamperometry";
+  const experimentBadge=chrono?"Potential step":`Estimated ${fitNumber(metrics.estimated_scan_rate,4)} V s⁻¹`;
+  const coordinateRows=chrono
+    ? `<tr><th>Step position</th><td>${(100*metrics.switching_fraction).toFixed(1)}%</td></tr>`
+    : `<tr><th>Switching position</th><td>${(100*metrics.switching_fraction).toFixed(1)}%</td></tr><tr><th>Initial scan</th><td>${escapeHTML(metrics.initial_scan_direction)}</td></tr><tr><th>Duration mismatch</th><td>${(100*metrics.duration_relative_error).toFixed(2)}%</td></tr>`;
+  return `<div class="result-badges"><span class="result-badge ${errors||warnings?"":"success"}">${status}</span><span class="result-badge">${experimentBadge}</span><span class="result-badge">Largest gap ${fitNumber(metrics.maximum_gap_ratio,3)}× median</span></div>${issueRows}<details class="advanced-settings"><summary>Data preflight details</summary><div><table class="result-table"><tbody><tr><th>Duration</th><td>${fitNumber(metrics.duration,5)} s</td></tr><tr><th>Potential span</th><td>${fitNumber(metrics.potential_span,5)} V</td></tr>${coordinateRows}</tbody></table></div></details>`;
+}
+
+function syncFitBackgroundAvailability() {
+  const select=$("#fit-background-model"),chrono=experimentalDatasets.some(dataset=>dataset.experiment_type==="chronoamperometry");
+  if(chrono)select.value="none";
+  select.disabled=chrono;
+  select.title=chrono?"Potential-step data use the explicit Cdl/Ru circuit model rather than scan-rate-scaled charging.":"";
 }
 
 async function refreshDataQuality() {
@@ -66,15 +159,19 @@ async function refreshDataQuality() {
 }
 
 function renderBrowserDatasets() {
+  invalidateInference(experimentalDatasets.length?"Experimental data changed. Fit this study before interpreting its uncertainty.":"No experimental data loaded. Add your data to begin.");
   const output=$("#dataset-list");
   $("#dataset-count").textContent=`${experimentalDatasets.length} loaded`;
   $("#fit-next-button").disabled=!experimentalDatasets.length;
+  syncFitBackgroundAvailability();
   if(!experimentalDatasets.length){output.innerHTML='<div class="empty-state">No experimental files loaded yet.</div>';renderBrowserFitParameters();return;}
   output.innerHTML=experimentalDatasets.map((dataset,index)=>{
     let low=Infinity,high=-Infinity;for(const potential of dataset.potential){low=Math.min(low,potential);high=Math.max(high,potential);}
     const overrides=Object.keys(dataset.initial_concentrations||{}).length+Object.keys(dataset.initial_coverages||{}).length;
-    return `<article class="dataset-card browser-fit-dataset"><div class="dataset-name"><strong>${escapeHTML(dataset.name)}</strong><span>${dataset.time.length.toLocaleString()} points · ${low.toFixed(3)} to ${high.toFixed(3)} V</span></div><label class="field"><span>Scan rate <b>V s⁻¹</b></span><input data-fit-dataset="${index}" type="number" min="1e-8" step="any" value="${dataset.scan_rate}"></label><button class="remove-dataset" data-remove-fit-dataset="${index}" type="button" aria-label="Remove ${escapeHTML(dataset.name)}">×</button><div class="dataset-conditions" data-quality-index="${index}"><span class="helper-text">Checking waveform…</span></div><details class="dataset-conditions"><summary>Experiment conditions${overrides?` · ${overrides} override${overrides===1?"":"s"}`:""}</summary><p class="helper-text">Override this experiment’s initial solution concentrations or surface coverages. Names must match the selected mechanism; blank uses its shared values.</p><div class="custom-condition-grid"><label class="field"><span>Initial concentrations <b>M</b></span><input data-fit-concentrations="${index}" type="text" placeholder="Ox=0.001; Catalyst=0.0002" value="${escapeHTML(formatInitialConcentrations(dataset.initial_concentrations))}"></label><label class="field"><span>Initial surface coverages <b>mol cm⁻²</b></span><input data-fit-coverages="${index}" type="text" placeholder="GammaOx=1e-10" value="${escapeHTML(formatInitialConcentrations(dataset.initial_coverages))}"></label></div></details>${fitImportEditor(dataset,index)}</article>`;
+    const chrono=dataset.experiment_type==="chronoamperometry";
+    return `<article class="dataset-card browser-fit-dataset"><div class="dataset-name"><strong>${escapeHTML(dataset.name)}</strong><span>${dataset.time.length.toLocaleString()} points · ${low.toFixed(3)} to ${high.toFixed(3)} V</span></div><label class="field"><span>Technique</span><select data-fit-technique="${index}"><option value="cyclic_voltammetry" ${chrono?"":"selected"}>Cyclic voltammetry</option><option value="chronoamperometry" ${chrono?"selected":""}>Potential-step chronoamperometry</option></select></label><label class="field" ${chrono?"hidden":""}><span>Scan rate <b>V s⁻¹</b></span><input data-fit-dataset="${index}" type="number" min="1e-8" step="any" value="${dataset.scan_rate}"></label><button class="remove-dataset" data-remove-fit-dataset="${index}" type="button" aria-label="Remove ${escapeHTML(dataset.name)}">×</button><div class="dataset-conditions" data-quality-index="${index}"><span class="helper-text">Checking waveform…</span></div><details class="dataset-conditions"><summary>Experiment conditions${overrides?` · ${overrides} override${overrides===1?"":"s"}`:""}</summary><p class="helper-text">Override this experiment’s initial solution concentrations or surface coverages. Names must match the selected mechanism; blank uses its shared values.</p><div class="custom-condition-grid"><label class="field"><span>Initial concentrations <b>M</b></span><input data-fit-concentrations="${index}" type="text" placeholder="Ox=0.001; Catalyst=0.0002" value="${escapeHTML(formatInitialConcentrations(dataset.initial_concentrations))}"></label><label class="field"><span>Initial surface coverages <b>mol cm⁻²</b></span><input data-fit-coverages="${index}" type="text" placeholder="GammaOx=1e-10" value="${escapeHTML(formatInitialConcentrations(dataset.initial_coverages))}"></label></div></details>${fitImportEditor(dataset,index)}</article>`;
   }).join("");
+  $$('[data-fit-technique]').forEach(select=>select.addEventListener("change",()=>{const dataset=experimentalDatasets[+select.dataset.fitTechnique];dataset.experiment_type=select.value;dataset.experiment_type_locked=true;if(select.value==="cyclic_voltammetry"&&!(dataset.scan_rate>0))dataset.scan_rate=ElectrochemImport.inferScanRate(dataset.time,dataset.potential);if(select.value==="chronoamperometry")dataset.scan_rate=0;renderBrowserDatasets();}));
   $$('[data-fit-dataset]').forEach(input=>input.addEventListener("change",()=>{experimentalDatasets[+input.dataset.fitDataset].scan_rate=Number(input.value);void refreshDataQuality();}));
   $$('[data-fit-concentrations]').forEach(input=>input.addEventListener("change",()=>{
     const error=$("#data-error");
@@ -123,12 +220,18 @@ function customFitParameterCards() {
   }
   entries=entries.map(entry=>({...entry,...customFitParameterState[entry.id]}));
   const sharing=canShareDiffusion?`<label class="fit-link-toggle"><input id="fit-link-diffusion" type="checkbox" ${fitSharedDiffusionEnabled?"checked":""}><span><strong>Use one diffusion coefficient for all solution species</strong><small>This reduces correlation when equal diffusion is chemically reasonable. Leave it off when independently measured diffusion coefficients differ.</small></span></label>`:"";
-  return `<div class="fit-explainer"><strong>Active editable reaction setup</strong><span>The simulation values supply the initial guesses below. Select only parameters that the loaded experiments can constrain. Diffusion fitting is advanced: normally fix D independently unless multiple scan rates and known concentrations and electrode area constrain it.</span></div>${sharing}`+entries.map(entry=>`<article class="parameter-estimate-card"><label class="parameter-estimate-toggle"><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="fit" type="checkbox" ${entry.fit?"checked":""}><span><strong>Estimate ${escapeHTML(entry.label)}</strong><small>${escapeHTML(entry.transform)} coordinate${entry.advanced?" · advanced":""}</small></span></label><label class="parameter-start-value"><span>Starting / fixed value <b>${escapeHTML(entry.unit)}</b></span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="value" type="number" step="any" value="${entry.value}"></label><label class="parameter-start-value"><span>Lower bound</span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="lower" type="number" step="any" value="${entry.lower}"></label><label class="parameter-start-value"><span>Upper bound</span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="upper" type="number" step="any" value="${entry.upper}"></label></article>`).join("");
+  return `<div class="fit-explainer"><strong>Active editable reaction setup</strong><span>The simulation values supply the initial guesses below. Select only parameters that the loaded experiments can constrain. Diffusion fitting is advanced: normally fix D independently unless multiple scan rates or time-dependent experiments with known concentrations and electrode area constrain it.</span></div>${sharing}`+entries.map(entry=>`<article class="parameter-estimate-card"><label class="parameter-estimate-toggle"><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="fit" type="checkbox" ${entry.fit?"checked":""}><span><strong>Estimate ${escapeHTML(entry.label)}</strong><small>${escapeHTML(entry.transform)} coordinate${entry.advanced?" · advanced":""}</small></span></label><label class="parameter-start-value"><span>Starting / fixed value <b>${escapeHTML(entry.unit)}</b></span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="value" type="number" step="any" value="${entry.value}"></label><label class="parameter-start-value"><span>Lower bound</span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="lower" type="number" step="any" value="${entry.lower}"></label><label class="parameter-start-value"><span>Upper bound</span><input data-custom-fit="${escapeHTML(entry.id)}" data-custom-fit-key="upper" type="number" step="any" value="${entry.upper}"></label></article>`).join("");
 }
 
 function renderBrowserFitParameters() {
-  if(!experimentalDatasets.length){$("#fit-parameter-list").innerHTML='<div class="empty-state">Load at least one voltammogram before choosing parameters to estimate.</div>';$("#fit-button").disabled=true;return;}
+  if(typeof syncDiscoveryAvailability==="function")syncDiscoveryAvailability();
+  if($("#builder-transport")?.value==="pnp"){$("#fit-parameter-list").innerHTML='<div class="model-warning">PNP parameter fitting is not available yet. This simulation cannot be fitted as a diffusion-only model without changing the transport assumption.</div>';$("#fit-button").disabled=true;return;}
+  if(!experimentalDatasets.length){$("#fit-parameter-list").innerHTML='<div class="empty-state">Load at least one electrochemical trace before choosing parameters to estimate.</div>';$("#fit-button").disabled=true;return;}
   $("#fit-parameter-list").innerHTML=customFitParameterCards();
+  if(customMechanism.shared_electron_transfer){
+    $("#fit-parameter-list").insertAdjacentHTML("beforeend",'<div class="fit-explainer"><span>One shared k0 preserves the selected model’s constraint. Unlink only to test a model with separate electrode rate constants.</span><button id="fit-unlink-electron-rate" type="button" class="button secondary small">Use separate electron-transfer rates</button></div>');
+    $("#fit-unlink-electron-rate").addEventListener("click",()=>{const shared=customFitParameterState.shared_k0||customMechanism.shared_electron_transfer;customMechanism.reactions.filter(r=>r.type==="solution_electron").forEach(r=>r.parameters.k0={...shared});delete customMechanism.shared_electron_transfer;markMechanismChanged();renderCustomMechanism();});
+  }
   $("#fit-button").disabled=false;
   $("#fit-link-diffusion")?.addEventListener("change",event=>{fitSharedDiffusionEnabled=event.target.checked;renderBrowserFitParameters();});
   $$('[data-custom-fit]').forEach(input=>input.addEventListener("change",()=>{const state=customFitParameterState[input.dataset.customFit];if(state)state[input.dataset.customFitKey]=input.dataset.customFitKey==="fit"?input.checked:Number(input.value);}));
@@ -137,9 +240,11 @@ function renderBrowserFitParameters() {
 function browserFitDatasets() {
   const backgroundModel=$("#fit-background-model")?.value||"none";
   return experimentalDatasets.map(dataset=>({
+    name:dataset.name,
     time:[...dataset.time],potential:[...dataset.potential],current:[...dataset.current],
     scan_rate:Number(dataset.scan_rate),initial_concentrations:{...(dataset.initial_concentrations||{})},
-    initial_coverages:{...(dataset.initial_coverages||{})},background_model:backgroundModel
+    initial_coverages:{...(dataset.initial_coverages||{})},background_model:dataset.experiment_type==="chronoamperometry"?"none":backgroundModel,
+    experiment_type:dataset.experiment_type||"cyclic_voltammetry"
   }));
 }
 
@@ -159,6 +264,7 @@ function fitSettings() {
 }
 
 function customFitPayload() {
+  requireSupportedInference();
   const model=serializeCustomModel();
   for(const [id,settings] of Object.entries(customFitParameterState)){
     if(id==="shared_D"||(fitSharedDiffusionEnabled&&/^s\d+_D$/.test(id)))continue;
@@ -196,20 +302,20 @@ function renderDetailedResidualDiagnostics(report) {
   if(!report)return "";
   const issues=report.issues.map(issue=>{const name=issue.dataset?experimentalDatasets[issue.dataset-1]?.name||`Dataset ${issue.dataset}`:"Study";return `<div class="model-warning"><strong>Residuals · ${escapeHTML(name)}:</strong> ${escapeHTML(issue.message)}</div>`;}).join("");
   const rows=report.datasets.map((metrics,index)=>`<tr><td>${escapeHTML(experimentalDatasets[index]?.name||`Dataset ${index+1}`)}</td><td>${Number(metrics.rms).toExponential(3)}</td><td>${Number(metrics.mean_bias_ratio).toFixed(3)}</td><td>${Number(metrics.lag_one_correlation).toFixed(3)}</td><td>${Number(metrics.branch_bias_ratio).toFixed(3)}</td><td>${Number(metrics.signal_scale_ratio).toFixed(2)}×</td><td>${Number(metrics.potential_correlation).toFixed(3)}</td><td>${(100*Number(metrics.outlier_fraction)).toFixed(2)}%</td></tr>`).join("");
-  return `<div class="result-badges"><span class="result-badge ${report.passed?"success":""}">Residual diagnostics ${report.passed?"passed":"need review"}</span><span class="result-badge">AR(1) ρ=${fitNumber(report.residual_noise.correlation,3)}</span></div>${issues}<details class="advanced-settings"><summary>Residual trust details</summary><div><p class="helper-text">Weighted residual screens are descriptive checks for model inadequacy, not formal hypothesis tests.</p><table class="result-table"><thead><tr><th>Dataset</th><th>RMS</th><th>Bias / RMS</th><th>Lag-1</th><th>Branch / RMS</th><th>Scale ratio</th><th>Potential corr.</th><th>Outliers</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
+  return `<div class="result-badges"><span class="result-badge ${report.passed?"success":""}">Residual diagnostics ${report.passed?"passed":"need review"}</span><span class="result-badge">AR(1) ρ=${fitNumber(report.residual_noise.correlation,3)}</span></div>${issues}<details class="advanced-settings"><summary>Residual trust details</summary><div><p class="helper-text">Weighted residual screens are descriptive checks for model inadequacy, not formal hypothesis tests.</p><table class="result-table"><thead><tr><th>Dataset</th><th>RMS</th><th>Bias / RMS</th><th>Lag-1</th><th>Region / RMS</th><th>Scale ratio</th><th>Potential corr.</th><th>Outliers</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
 }
 
-function drawFitCanvas(canvasId,legendId,series) {
+function drawFitCanvas(canvasId,legendId,series,xLabel,reverseX) {
   const canvas=$(canvasId);if(!canvas||!series.length)return;
   const rect=canvas.getBoundingClientRect(),ratio=window.devicePixelRatio||1;
   canvas.width=Math.max(1,Math.round(rect.width*ratio));canvas.height=Math.max(1,Math.round(rect.height*ratio));
   const ctx=canvas.getContext("2d");ctx.scale(ratio,ratio);
   const width=rect.width,height=rect.height,pad={left:68,right:24,top:22,bottom:52},plotW=width-pad.left-pad.right,plotH=height-pad.top-pad.bottom;
   let xmin=Infinity,xmax=-Infinity,ymin=Infinity,ymax=-Infinity;
-  series.forEach(trace=>{trace.potential.forEach(value=>{xmin=Math.min(xmin,value);xmax=Math.max(xmax,value);});trace.current.forEach(value=>{ymin=Math.min(ymin,value);ymax=Math.max(ymax,value);});});
+  series.forEach(trace=>{trace.coordinate.forEach(value=>{xmin=Math.min(xmin,value);xmax=Math.max(xmax,value);});trace.current.forEach(value=>{ymin=Math.min(ymin,value);ymax=Math.max(ymax,value);});});
   const xspan=Math.max(xmax-xmin,1e-12),yspan=Math.max(ymax-ymin,Math.max(Math.abs(ymin),Math.abs(ymax))*0.1,1e-15);
   ymin-=.08*yspan;ymax+=.08*yspan;
-  const unit=currentUnit(Math.max(Math.abs(ymin),Math.abs(ymax))),reverse=activeVoltammogramConvention().reversePotentialAxis;
+  const unit=currentUnit(Math.max(Math.abs(ymin),Math.abs(ymax))),reverse=Boolean(reverseX);
   const xpx=x=>pad.left+(reverse?(xmax-x):(x-xmin))/xspan*plotW,ypx=y=>pad.top+(ymax-y)/(ymax-ymin)*plotH;
   ctx.clearRect(0,0,width,height);ctx.fillStyle="#fbfcfb";ctx.fillRect(0,0,width,height);
   ctx.font="11px Inter, sans-serif";ctx.textAlign="center";ctx.textBaseline="top";
@@ -223,31 +329,33 @@ function drawFitCanvas(canvasId,legendId,series) {
   if(ymin<0&&ymax>0){ctx.strokeStyle="#aebcb8";ctx.beginPath();ctx.moveTo(pad.left,ypx(0));ctx.lineTo(pad.left+plotW,ypx(0));ctx.stroke();}
   series.forEach(trace=>{
     ctx.strokeStyle=trace.color;ctx.lineWidth=trace.dashed?2:1.4;ctx.setLineDash(trace.dashed?[7,4]:[]);ctx.globalAlpha=trace.dashed?1:.72;ctx.beginPath();
-    trace.current.forEach((value,index)=>index?ctx.lineTo(xpx(trace.potential[index]),ypx(value)):ctx.moveTo(xpx(trace.potential[index]),ypx(value)));ctx.stroke();
+    trace.current.forEach((value,index)=>index?ctx.lineTo(xpx(trace.coordinate[index]),ypx(value)):ctx.moveTo(xpx(trace.coordinate[index]),ypx(value)));ctx.stroke();
   });
-  ctx.setLineDash([]);ctx.globalAlpha=1;ctx.fillStyle="#304b53";ctx.font="12px Inter, sans-serif";ctx.textAlign="center";ctx.textBaseline="bottom";ctx.fillText("Potential vs reference (V)",pad.left+plotW/2,height-7);ctx.save();ctx.translate(16,pad.top+plotH/2);ctx.rotate(-Math.PI/2);ctx.fillText(`Current (${unit.label})`,0,0);ctx.restore();
+  ctx.setLineDash([]);ctx.globalAlpha=1;ctx.fillStyle="#304b53";ctx.font="12px Inter, sans-serif";ctx.textAlign="center";ctx.textBaseline="bottom";ctx.fillText(xLabel,pad.left+plotW/2,height-7);ctx.save();ctx.translate(16,pad.top+plotH/2);ctx.rotate(-Math.PI/2);ctx.fillText(`Current (${unit.label})`,0,0);ctx.restore();
   $(legendId).innerHTML=series.map(trace=>`<span class="legend-item"><i class="legend-line ${trace.dashed?"fit-line":""}" style="background:${trace.color};color:${trace.color}"></i>${escapeHTML(trace.name)}</span>`).join("");
 }
 
-function drawFitCharts(result) {
+function drawFitCharts(result,datasets=latestBrowserFitPayload?.datasets||[]) {
   const fitSeries=[],residualSeries=[];
-  experimentalDatasets.forEach((dataset,index)=>{
-    const color=colors[index%colors.length],name=dataset.name||`Dataset ${index+1}`,fitted=result.fitted_current[index]||[];
-    fitSeries.push({name:`${name} · experiment`,potential:dataset.potential,current:dataset.current.map(displayedCurrent),color,dashed:false});
-    fitSeries.push({name:`${name} · fit`,potential:dataset.potential,current:fitted.map(displayedCurrent),color,dashed:true});
-    residualSeries.push({name:`${name} · data − fit`,potential:dataset.potential,current:dataset.current.map((value,point)=>displayedCurrent(value-(fitted[point]||0))),color,dashed:false});
+  const chrono=datasets.every(dataset=>dataset.experiment_type==="chronoamperometry");
+  datasets.forEach((dataset,index)=>{
+    const color=colors[index%colors.length],name=dataset.name||`Dataset ${index+1}`,fitted=result.fitted_current[index]||[],coordinate=chrono?dataset.time:dataset.potential;
+    fitSeries.push({name:`${name} · experiment`,coordinate,current:dataset.current.map(displayedCurrent),color,dashed:false});
+    fitSeries.push({name:`${name} · fit`,coordinate,current:fitted.map(displayedCurrent),color,dashed:true});
+    residualSeries.push({name:`${name} · data − fit`,coordinate,current:dataset.current.map((value,point)=>displayedCurrent(value-(fitted[point]||0))),color,dashed:false});
   });
-  drawFitCanvas("#fit-overlay-chart","#fit-overlay-legend",fitSeries);
-  drawFitCanvas("#fit-residual-chart","#fit-residual-legend",residualSeries);
+  const label=chrono?"Time (s)":"Potential vs reference (V)",reverse=!chrono&&activeVoltammogramConvention().reversePotentialAxis;
+  drawFitCanvas("#fit-overlay-chart","#fit-overlay-legend",fitSeries,label,reverse);
+  drawFitCanvas("#fit-residual-chart","#fit-residual-legend",residualSeries,label,reverse);
 }
 
 function renderFittedBackgrounds(backgrounds=[]) {
   const active=backgrounds.filter(background=>background.model!=="none");if(!active.length)return "";
   const capacitance=Number(active[0].charging_capacitance_F);
-  const area=Number($('[data-key="electrode_area"]')?.value||0);
+  const area=Number(latestBrowserFitPayload?.electrode_area||0);
   const arealCapacitance=area>0?capacitance/area:null;
   const capacitanceReview=arealCapacitance!==null&&arealCapacitance>1e-3?`<div class="model-warning"><strong>Review charging capacitance:</strong> ${(1e6*arealCapacitance).toPrecision(4)} μF cm⁻² is unusually large for a compact electrode. Check the electrode area, current units, cycle/history, and whether the background model is absorbing missing faradaic physics.</div>`:"";
-  const rows=active.map(background=>{const scanRate=Number(experimentalDatasets[background.dataset-1]?.scan_rate||0);return `<tr><td>${escapeHTML(experimentalDatasets[background.dataset-1]?.name||`Dataset ${background.dataset}`)}</td><td>${Number(background.offset_A).toExponential(4)}</td><td>${Math.abs(capacitance*scanRate).toExponential(4)}</td></tr>`;}).join("");
+  const rows=active.map(background=>{const dataset=latestBrowserFitPayload?.datasets[background.dataset-1],scanRate=Number(dataset?.scan_rate||0);return `<tr><td>${escapeHTML(dataset?.name||`Dataset ${background.dataset}`)}</td><td>${Number(background.offset_A).toExponential(4)}</td><td>${Math.abs(capacitance*scanRate).toExponential(4)}</td></tr>`;}).join("");
   return `${capacitanceReview}<details class="advanced-settings"><summary>Fitted charging-current model</summary><div><p class="helper-text">Shared whole-cell capacitance: <b>${capacitance.toExponential(4)} F</b>${arealCapacitance===null?"":` (${(1e6*arealCapacitance).toPrecision(4)} μF cm⁻²)`}. EchemLab uses I<sub>charge</sub> = C<sub>cell</sub>v on the cathodic scan and reverses its sign on the return scan. The constant file offsets and the one shared capacitance are counted in AIC/AICc.</p><table class="result-table"><thead><tr><th>Dataset</th><th>Constant offset (A)</th><th>|C<sub>cell</sub>v| (A)</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
 }
 
@@ -257,34 +365,38 @@ function renderFitResult(result) {
   const estimates=`<table class="result-table"><thead><tr><th>Parameter</th><th>Estimate</th><th>Standard error</th><th>Approx. 95% interval</th></tr></thead><tbody>${result.estimates.map(estimate=>`<tr><td>${escapeHTML(estimate.name)}</td><td>${fitNumber(estimate.value)}</td><td>${fitNumber(estimate.standard_error)}</td><td>${fitNumber(estimate.confidence_lower)} – ${fitNumber(estimate.confidence_upper)}</td></tr>`).join("")}</tbody></table>`;
   const robust=result.loss==="student_t";
   const attempts=`<details class="advanced-settings"><summary>Multistart details</summary><div>${diagnostics.adaptive_fallbacks?`<p class="helper-text">${diagnostics.adaptive_fallbacks} start${diagnostics.adaptive_fallbacks===1?"":"s"} used a bounded derivative-free rescue pass before LM polishing.</p>`:""}<table class="result-table"><thead><tr><th>Start</th><th>Status</th><th>${robust?"Robust objective":"Weighted RSS"}</th><th>Iterations</th></tr></thead><tbody>${result.attempts.map((attempt,index)=>`<tr><td>${index+1}</td><td>${attempt.error?"Failed":attempt.converged?"Converged":"Stopped"}</td><td>${(robust?attempt.objective:attempt.weighted_rss)==null?"—":Number(robust?attempt.objective:attempt.weighted_rss).toExponential(3)}</td><td>${attempt.iterations}</td></tr>`).join("")}</tbody></table></div></details>`;
-  const jacobian=result.jacobian_method==="profiled_background_finite_difference"?"Profiled background · finite differences":"Forward-sensitivity Jacobian";
-  const plots=`<section class="fit-plot-section"><h4>Experimental data and fitted model</h4><div class="fit-chart-wrap"><canvas id="fit-overlay-chart" aria-label="Experimental voltammograms and fitted model"></canvas></div><div id="fit-overlay-legend" class="legend"></div><h4>Residuals</h4><p class="helper-text">Residual = experimental current − fitted current. Random scatter around zero is the desired pattern.</p><div class="fit-chart-wrap residual"><canvas id="fit-residual-chart" aria-label="Fit residuals"></canvas></div><div id="fit-residual-legend" class="legend"></div></section>`;
+  const jacobian=result.jacobian_method==="profiled_background_finite_difference"?"Profiled background · finite differences":result.jacobian_method==="trajectory_finite_difference"?"Trajectory finite differences":"Forward-sensitivity Jacobian";
+  const plots=`<section class="fit-plot-section"><h4>Experimental data and fitted model</h4><div class="fit-chart-wrap"><canvas id="fit-overlay-chart" aria-label="Experimental electrochemical traces and fitted model"></canvas></div><div id="fit-overlay-legend" class="legend"></div><h4>Residuals</h4><p class="helper-text">Residual = experimental current − fitted current. Random scatter around zero is the desired pattern.</p><div class="fit-chart-wrap residual"><canvas id="fit-residual-chart" aria-label="Fit residuals"></canvas></div><div id="fit-residual-legend" class="legend"></div></section>`;
   $("#fit-summary").className="";
   $("#fit-summary").innerHTML=`<div class="result-badges"><span class="result-badge ${result.converged?"success":""}">${result.converged?"Best start converged":"Best start stopped"}</span><span class="result-badge">${result.loss==="student_t"?"Robust Student-t":"Least squares"}</span><span class="result-badge">${jacobian}</span><span class="result-badge">${diagnostics.converged_attempts}/${result.attempts.length} starts converged</span><span class="result-badge">${diagnostics.distinct_solutions} competitive solution${diagnostics.distinct_solutions===1?"":"s"}</span><span class="result-badge">AICc ${result.aicc==null?"—":Number(result.aicc).toFixed(2)}</span><span class="result-badge">${Number(result.elapsed_seconds||0).toFixed(2)} s</span></div>${warnings}${estimates}${renderFittedBackgrounds(result.fitted_backgrounds)}${plots}${attempts}${renderOptimizerRobustness(result.optimizer_robustness)}${renderDetailedResidualDiagnostics(result.residual_diagnostics)}${renderBrowserNumericalCertification(result.numerical_certification)}`;
-  requestAnimationFrame(()=>drawFitCharts(result));
+  const payload=latestBrowserFitPayload,label=latestBrowserUncertaintyTarget.label;
+  const snapshot=payload?.datasets||[];
+  $("#fit-summary").insertAdjacentHTML("beforeend",'<button id="fit-analyze-uncertainty" class="button primary action-button" type="button">Analyze uncertainty for this fit</button>');
+  $("#fit-analyze-uncertainty").addEventListener("click",()=>selectFitForUncertainty(result,payload,label));
+  requestAnimationFrame(()=>{if(result===latestBrowserFit)drawFitCharts(result,snapshot);});
 }
 
 async function runBrowserFit() {
   const error=$("#fit-error"),button=$("#fit-button");error.hidden=true;
-  if(!experimentalDatasets.length){error.textContent="Load at least one voltammogram first.";error.hidden=false;return;}
+  if(!experimentalDatasets.length){error.textContent="Load at least one electrochemical trace first.";error.hidden=false;return;}
+  if(new Set(experimentalDatasets.map(dataset=>dataset.experiment_type||"cyclic_voltammetry")).size>1){error.textContent="Fit cyclic-voltammetry and potential-step studies separately for now.";error.hidden=false;return;}
   button.disabled=true;button.textContent="Estimating parameters…";
+  const revision=inferenceRevision,request=++fitRequestSequence;
   try{
     const payload=customFitPayload();
     const engine=window.electrochemBrowserEngine;
     const preflight=await engine.inspectData(payload.datasets);
+    if(revision!==inferenceRevision||request!==fitRequestSequence)return;
     latestDataQualityReport=preflight;
-    if(!preflight.passed)throw new Error(`Data preflight found ${preflight.error_count} blocking error${preflight.error_count===1?"":"s"}. Review the loaded voltammogram cards before fitting.`);
+    if(!preflight.passed)throw new Error(`Data preflight found ${preflight.error_count} blocking error${preflight.error_count===1?"":"s"}. Review the loaded data cards before fitting.`);
     if(!engine.supportsCustomFit(payload))throw new Error("Select at least one continuous parameter from the active reaction setup.");
     const result=await engine.fitCustom(payload);
+    if(revision!==inferenceRevision||request!==fitRequestSequence)return;
     latestBrowserFit=result;latestBrowserFitPayload=payload;
-    latestBrowserUncertaintyTarget={kind:"custom",payload,fitResult:result};
-    if(typeof renderKnownInputOptions==="function")renderKnownInputOptions();
-    $("#uncertainty-parameter").innerHTML=result.estimates.map(estimate=>`<option value="${escapeHTML(estimate.name)}">${escapeHTML(estimate.name)}</option>`).join("");
-    if(typeof renderPosteriorPriorControls==="function")renderPosteriorPriorControls(result.estimates);
-    if(typeof updatePosteriorNoiseRecommendation==="function")updatePosteriorNoiseRecommendation(result);
+    setUncertaintyTarget({kind:"custom",payload,fitResult:result},result.estimates,`Fit ${++fitResultSequence}: ${payload.custom_model.name} · ${payload.datasets.length} experiment(s)`);
     renderFitResult(result);
-  }catch(problem){error.textContent=problem.message;error.hidden=false;}
-  finally{button.disabled=!experimentalDatasets.length;button.textContent="Estimate selected parameters";}
+  }catch(problem){if(revision===inferenceRevision&&request===fitRequestSequence){error.textContent=problem.message;error.hidden=false;}}
+  finally{if(request===fitRequestSequence){button.disabled=!experimentalDatasets.length||$("#builder-transport")?.value==="pnp";button.textContent="Estimate selected parameters";}}
 }
 
 $("#data-files").addEventListener("change",async event=>{
@@ -298,11 +410,26 @@ $("#data-files").addEventListener("change",async event=>{
 $("#use-simulation-button").addEventListener("click",()=>{
   const error=$("#data-error");error.hidden=true;
   if(!latestResult){error.textContent="Run a simulation first.";error.hidden=false;return;}
-  experimentalDatasets.push({id:++datasetSequence,name:`${customMechanism.name} simulation`,time:[...latestResult.time],potential:[...latestResult.potential],current:[...latestResult.series[0].current],scan_rate:Number($('[data-key="scan_rate"]').value),initial_concentrations:{},initial_coverages:{},background_model:"none"});
+  const source=latestResult._simulationInput;
+  if(!source){error.textContent="This simulation has no saved experiment setup. Run it again before importing its trace.";error.hidden=false;return;}
+  const initial_concentrations={},initial_coverages={};
+  for(const species of source.custom_model?.species||[])(species.phase==="surface"?initial_coverages:initial_concentrations)[species.name]=species.initial;
+  experimentalDatasets.push({id:++datasetSequence,name:`${source.custom_model?.name||"Saved"} simulation`,time:[...latestResult.time],potential:[...latestResult.potential],current:[...latestResult.series[0].current],scan_rate:latestResult.experiment_type==="chronoamperometry"?0:Number(source.scan_rate),experiment_type:latestResult.experiment_type||"cyclic_voltammetry",experiment_type_locked:true,initial_concentrations,initial_coverages,background_model:"none"});
+  const sourceSolver=latestResult._simulationInput?.solver;
+  if(["bdf1","bdf2","be_fe","trap_ab2"].includes(sourceSolver))$("#fit-solver").value=sourceSolver;
+  if(Number.isFinite(Number(latestResult.points)))$("#fit-steps").value=String(Math.min(50000,Math.max(300,Number(latestResult.points))));
+  if(Number.isFinite(Number(latestResult.resolution?.grid_points)))$("#fit-grid").value=String(Math.min(128,Math.max(8,Number(latestResult.resolution.grid_points))));
   renderBrowserDatasets();
 });
 $("#clear-data-button").addEventListener("click",()=>{experimentalDatasets.length=0;renderBrowserDatasets();});
-$("#fit-background-model").addEventListener("change",()=>{latestBrowserFit=null;latestBrowserFitPayload=null;});
+// Input events invalidate immediately, before blur, so an in-flight calculation
+// cannot publish into a study the user is already editing.
+function onInferenceStudyEdit(event) {
+  const input=event.target;
+  if(input.closest?.("#view-data,#view-fit,.mechanism-editor")||input.matches?.("[data-key],#builder-transport"))invalidateInference();
+}
+document.addEventListener("input",onInferenceStudyEdit);
+document.addEventListener("change",onInferenceStudyEdit);
 $("#fit-loss").addEventListener("change",()=>{$$(".robust-fit-setting").forEach(field=>{field.hidden=$("#fit-loss").value!=="student_t";});});
 $("#fit-button").addEventListener("click",runBrowserFit);
 renderBrowserDatasets();
