@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Browser-based electrochemical simulation, fitting, mechanism discovery, and uncertainty analysis in Rust and WebAssembly.">
   <title>EchemLab — Electrochemical Simulation and Inference</title>
-  <link rel="stylesheet" href="styles.css?v=20261003-chrono1">
+  <link rel="stylesheet" href="styles.css?v=20261004-ec-guide1">
 </head>
 <body>
   <header class="app-header">
@@ -204,6 +204,7 @@
 
       <div id="view-data" class="workbench-view">
         <section class="intro-row"><div><p class="eyebrow">Parameter estimation · Step 1</p><h2>Add the experiments you want to fit</h2><p>Load one or more cyclic voltammograms or potential-step traces collected for the same fixed species inventory, confirm their normalization, then continue to parameter selection.</p></div></section>
+        <div class="fit-explainer"><strong>Shared conditions from Simulate</strong><span id="data-shared-conditions"></span><button class="button secondary small" type="button" data-view-target="simulate">Edit reaction and conditions</button></div>
         <section class="full-panel">
           <div class="section-heading"><span class="step-chip">A</span><div><h3>Import one or more electrochemical traces</h3><p>Select several files together or return later to add another batch. Every loaded experiment is fitted simultaneously.</p></div></div>
           <label class="drop-zone" for="data-files"><strong>Choose one or more data files</strong><span>CSV or text files with time, potential, and current columns</span><input id="data-files" type="file" multiple accept=".csv,.txt,.dat"></label>
@@ -213,7 +214,7 @@
         <section class="full-panel spaced">
           <div class="section-heading"><span class="step-chip">B</span><div><h3>Study datasets <span id="dataset-count" class="dataset-count">0 loaded</span></h3><p>Confirm the technique, column mapping, unit conversion, current sign, and reference-potential shift before fitting.</p></div></div>
           <div class="fit-explainer"><strong>Current background for the whole study</strong><span>The shared scan-rate charging model applies only to cyclic voltammetry. Potential-step data use the explicit Cdl and Ru values in the forward model; subtract a separately measured blank before fitting if the strip has additional background current.</span></div>
-          <label class="field fit-study-background"><span>Charging-current treatment</span><select id="fit-background-model"><option value="scan_rate_scaled_charging" selected>Shared scan-rate-scaled charging + file offsets</option><option value="none">None — data already background corrected</option></select></label>
+          <label class="field fit-study-background"><span>Charging-current treatment</span><select id="fit-background-model"><option value="scan_rate_scaled_charging" selected>Shared scan-rate-scaled charging + file offsets</option><option value="none">None — corrected data or explicit circuit model</option></select></label>
           <div id="dataset-list" class="dataset-list"><div class="empty-state">No experimental files loaded yet.</div></div>
           <div class="fit-next-row"><p>Your data are processed in memory and fitted together as one study. The application does not retain uploaded files.</p><button id="fit-next-button" class="button primary" type="button" data-view-target="fit" disabled>Continue to parameter selection</button></div>
         </section>
@@ -224,6 +225,7 @@
         <div class="analysis-grid">
           <section class="full-panel">
             <div class="section-heading"><span class="step-chip">A</span><div><h3>Active reaction setup and parameter vector</h3><p>The editable reaction setup from the simulation page is the forward model. Choose parameters supported by the number and range of experimental datasets.</p></div></div>
+            <div class="fit-explainer"><strong>Shared conditions from Simulate</strong><span id="fit-shared-conditions"></span><button class="button secondary small" type="button" data-view-target="simulate">Edit reaction and conditions</button></div>
             <div class="fit-explainer"><strong>Free and fixed quantities</strong><span><b>Checked:</b> estimated from the loaded electrochemical traces. <b>Unchecked:</b> held at the displayed value. Starting values and bounds are configured here, after data have been supplied.</span></div>
             <div id="fit-parameter-list" class="parameter-choice-grid"></div>
             <div class="section-heading compact subheading"><span class="step-chip">B</span><div><h3>Optimization</h3><p>Deterministic multistart reduces dependence on a single starting guess. Review every warning before interpreting a fit.</p></div></div>
@@ -238,6 +240,7 @@
               <label class="field"><span>Maximum iterations per start</span><input id="fit-iterations" type="number" min="1" max="1000" value="100"></label>
             </div>
             <div id="fit-error" class="error-message" role="alert" hidden></div>
+            <p id="fit-selection-summary" class="helper-text" role="status">Select the unknown parameters using the Estimate checkboxes above.</p>
             <button id="fit-button" class="button primary run-button" type="button">Estimate selected parameters</button>
           </section>
           <section class="results-panel">
@@ -376,6 +379,10 @@
             <article><span>5</span><div><h3>Fit data and assess uncertainty</h3><p>Upload measured time, potential, and current, confirm each experiment's conditions, and select the parameters to estimate. Inspect the fit and residuals, then use profiles or posterior sampling to assess which parameters the data constrain.</p><button class="text-link" type="button" data-view-target="data">Load experimental data →</button></div></article>
           </section>
           <aside class="guide-reference">
+            <h3>Worked EC example</h3>
+            <p>Follow a complete noisy, three-scan-rate study: simulate, fit, compare E / EC / CE, profile a rate constant, and account for measured-input uncertainty.</p>
+            <p><a href="examples/ec/" target="_blank" rel="noopener">Read the EC walkthrough</a> · <a href="examples/ec/README.md" download>README</a> · <a href="examples/ec/ec_start.json" download>Mechanism JSON</a></p>
+            <p>Download the synthetic data: <a href="examples/ec/ec_0.1Vs.csv" download>0.1 V/s</a> · <a href="examples/ec/ec_0.5Vs.csv" download>0.5 V/s</a> · <a href="examples/ec/ec_1.0Vs.csv" download>1.0 V/s</a>.</p>
             <h3>Current browser scope</h3>
             <p>Cyclic voltammetry and potential-step chronoamperometry, solution/surface parameter fitting, profile and posterior uncertainty, measured-input propagation, standard-library and balanced-network discovery, direct-from-voltammogram sparse rate-law inference, EC′ analytical diagnostics, adsorption and electron-transfer adsorption, and PNP transport run entirely in Rust/WebAssembly. Neural UDE training and inference are intentionally excluded.</p>
             <h3>Circuit elements</h3>
@@ -391,11 +398,11 @@
     </main>
   </div>
   <!-- Bump this shared version when publishing changed GUI or Wasm assets. -->
-  <script src="wasm-engine.js?v=20261003-chrono1" defer></script>
-  <script src="import_data.js?v=20261003-chrono1" defer></script>
-  <script src="app.js?v=20261003-chrono1" defer></script>
-  <script src="mechanism_builder.js?v=20261003-chrono1" defer></script>
-  <script src="fit-workflow.js?v=20261003-chrono1" defer></script>
-  <script src="discovery-workflow.js?v=20261003-chrono1" defer></script>
+  <script src="wasm-engine.js?v=20261004-ec-guide1" defer></script>
+  <script src="import_data.js?v=20261004-ec-guide1" defer></script>
+  <script src="app.js?v=20261004-ec-guide1" defer></script>
+  <script src="mechanism_builder.js?v=20261004-ec-guide1" defer></script>
+  <script src="fit-workflow.js?v=20261004-ec-guide1" defer></script>
+  <script src="discovery-workflow.js?v=20261004-ec-guide1" defer></script>
 </body>
 </html>
