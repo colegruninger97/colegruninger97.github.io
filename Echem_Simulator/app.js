@@ -97,6 +97,7 @@ function escapeHTML(value) {
 }
 
 function switchView(name) {
+  if(typeof renderFitConditions==="function")renderFitConditions();
   $$(".workbench-view").forEach(view => {
     view.classList.toggle("active", view.id === `view-${name}`);
   });

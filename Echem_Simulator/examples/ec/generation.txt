@@ -1,0 +1,7 @@
+Synthetic EC tutorial, seed 20261004. Not experimental measurements.
+E0=0.02 V; k0=0.01 cm/s; k=1.5 s^-1; alpha=0.5; D=1e-5 cm^2/s; Ox=1 mM; A=0.07 cm^2; T=298.15 K; Ru=Cdl=0.
+Independent Gaussian noise SD=1.5% of each clean peak current.
+scan=0.1 V/s: refinement RMS=0.015410%; noise_SD_A=2.676492186e-7
+scan=0.5 V/s: refinement RMS=0.013962%; noise_SD_A=5.621604394e-7
+scan=1 V/s: refinement RMS=0.013959%; noise_SD_A=7.738987039e-7
+Concentration conservation, nonnegativity, zero-chemical-rate limit, and refinement passed.

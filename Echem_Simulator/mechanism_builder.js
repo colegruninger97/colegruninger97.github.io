@@ -500,6 +500,18 @@ function renderCustomMechanism() {
   if(typeof renderVoltammetricRateOptions==="function")renderVoltammetricRateOptions();
 }
 
+function reactionParameterUnit(reaction,name) {
+  if(reaction.parameters[name]?.unit)return reaction.parameters[name].unit;
+  if(name==="E0")return "V";
+  if(name==="alpha"||name==="n")return "dimensionless";
+  if(name==="k0")return reaction.type==="solution_electron"?"cm s⁻¹":reaction.type==="surface_electron"?"s⁻¹":"mol cm⁻² s⁻¹";
+  if(name==="k"&&reaction.type==="bulk_mass_action"){
+    const order=reaction.reactants.reduce((total,term)=>total+Number(term.stoich),0);
+    return order===1?"s⁻¹":order===2?"M⁻¹ s⁻¹":`M^${1-order} s⁻¹`;
+  }
+  return reactionParameterMeta[reaction.type]?.[name]?.[5]||"model units";
+}
+
 function customFitParameterEntries() {
   const model=serializeCustomModel(),entries=[];
   if(model.shared_electron_transfer)entries.push({id:"shared_k0",label:"shared solution electron-transfer rate",unit:"cm s⁻¹",...model.shared_electron_transfer});
@@ -509,7 +521,7 @@ function customFitParameterEntries() {
     if(model.shared_electron_transfer&&reaction.type==="solution_electron"&&name==="k0")return;
     if(["solution_electron","surface_electron","electroadsorption"].includes(reaction.type)&&name==="n")return;
     const meta=reactionParameterMeta[reaction.type]?.[name];
-    entries.push({id:`r${index+1}_${name}`,label:`${reaction.label||`Reaction ${index+1}`} · ${name}`,value:parameter.value,unit:parameter.unit||meta?.[5]||"model units",fit:Boolean(parameter.fit),lower:Number(parameter.lower??meta?.[2]??-1e12),upper:Number(parameter.upper??meta?.[3]??1e12),transform:parameter.transform||meta?.[4]||"identity",advanced:false});
+    entries.push({id:`r${index+1}_${name}`,label:`${reaction.label||`Reaction ${index+1}`} · ${name}`,value:parameter.value,unit:reactionParameterUnit(reaction,name),fit:Boolean(parameter.fit),lower:Number(parameter.lower??meta?.[2]??-1e12),upper:Number(parameter.upper??meta?.[3]??1e12),transform:parameter.transform||meta?.[4]||"identity",advanced:false});
   }));
   return entries;
 }

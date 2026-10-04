@@ -1,0 +1,189 @@
+<!doctype html>
+<!-- Generated from README.md; keep the guide and README together when revising. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>EC worked example · EchemLab</title>
+<style>body{margin:0;background:#f5f7f9;color:#253644;font:16px/1.65 system-ui,sans-serif}main{max-width:980px;margin:auto;padding:36px 28px 80px;background:white}a{color:#165e89}nav{display:flex;gap:24px;flex-wrap:wrap;border-bottom:1px solid #dce4eb;padding-bottom:18px}h1{line-height:1.2;font-size:2.1rem}h2{margin-top:2.4em;color:#254e69;border-bottom:2px solid #a4c7e0;padding-bottom:8px}h3{margin-top:1.8em}table{border-collapse:collapse;display:block;overflow:auto;width:100%;font-size:.94rem}th,td{border-bottom:1px solid #dce4eb;padding:9px 13px;text-align:left}th{background:#eaf2f8}pre{overflow:auto;background:#f0f4f7;padding:16px;border-radius:6px;line-height:1.5}code{font-size:.9em}img{max-width:100%;height:auto}li{margin:.45em 0}@media(max-width:600px){main{padding:20px 16px}h1{font-size:1.7rem}}</style></head><body><main><nav><a href="../../">← Open EchemLab</a><a href="README.md" download>Download README</a><a href="ec_start.json" download>Download mechanism</a></nav><h1>EC: a complete website walkthrough</h1>
+<p>Use <a href="https://colegruninger.com/Echem_Simulator/">EchemLab</a> to follow one study from a forward simulation to parameter estimation, mechanism comparison, and uncertainty. No programming or Julia is needed.</p>
+<p>This example uses <strong>synthetic, noisy data</strong>, not experimental measurements. It is a reproducible teaching and regression example, not evidence that every mechanism or uncertainty interval is validated for real electrodes.</p>
+<h2>1. What are we modeling?</h2>
+<pre><code class="language-text">Ox + e− ⇌ Red       Butler–Volmer electron transfer at the electrode
+Red → Product      homogeneous first-order conversion, rate = k[Red]
+</code></pre>
+<p>All three species diffuse in solution. The working assumptions are planar, one-dimensional diffusion, excess supporting electrolyte, a quiescent solution, and a distant bulk boundary. The electrode exchanges electrons with Ox/Red; Product is electroinactive. There is no adsorption, enzyme, finite closed strip volume, or convection in this example.</p>
+<p>The three reaction–diffusion equations are:</p>
+<pre><code class="language-text">∂[Ox]/∂t      = D ∂²[Ox]/∂x²
+∂[Red]/∂t     = D ∂²[Red]/∂x² − k[Red]
+∂[Product]/∂t = D ∂²[Product]/∂x² + k[Red]
+</code></pre>
+<p>Butler–Volmer kinetics supply the Ox/Red electrode fluxes. Product has zero electrode flux. Changing the applied potential program gives either CV or chronoamperometry with the same chemistry.</p>
+<h2>2. Load the mechanism and simulate</h2>
+<p>Download <a href="ec_start.json">ec_start.json</a> and the three data files: <a href="ec_0.1Vs.csv">0.1 V/s</a>, <a href="ec_0.5Vs.csv">0.5 V/s</a>, <a href="ec_1.0Vs.csv">1.0 V/s</a>. These are also linked under <strong>Reference → Worked EC example</strong> on the website.</p>
+<ol>
+<li>Open <strong>Simulate → Import JSON</strong> and select <code>ec_start.json</code>.</li>
+<li>Check that the species are Ox, Red, and Product, with one solution electron-transfer reaction and one homogeneous mass-action reaction. Keep supported-electrolyte transport.</li>
+<li>Enter these experiment conditions:</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th align="right">Value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Technique</td>
+<td align="right">Cyclic voltammetry</td>
+</tr>
+<tr>
+<td>Initial potential</td>
+<td align="right">+0.30 V</td>
+</tr>
+<tr>
+<td>Switching potential</td>
+<td align="right">−0.30 V</td>
+</tr>
+<tr>
+<td>Scan rate</td>
+<td align="right">0.50 V/s</td>
+</tr>
+<tr>
+<td>Temperature</td>
+<td align="right">298.15 K</td>
+</tr>
+<tr>
+<td>Electrode area</td>
+<td align="right">0.070 cm²</td>
+</tr>
+<tr>
+<td>Solution resistance, Ru</td>
+<td align="right">0 Ω</td>
+</tr>
+<tr>
+<td>Double-layer capacitance, Cdl</td>
+<td align="right">0 μF/cm²</td>
+</tr>
+<tr>
+<td>Time integrator</td>
+<td align="right">Fixed-step fully implicit BDF2</td>
+</tr>
+</tbody></table>
+<p>The JSON supplies 0.001 M Ox, zero Red/Product, and D = 0.00001 cm²/s for every species. <strong>Importing a mechanism does not import these waveform or electrode conditions.</strong></p>
+<p>Click <strong>Simulate</strong>. Review the numerical-resolution report. Save traces explicitly if you want to compare different scan rates or rate constants. The imported starting values deliberately differ from the data-generating values: this first curve is an initial guess, not the eventual fit.</p>
+<p>The scan starts positive of E⁰ and moves negative, reducing Ox. The chemical step consumes Red, reducing its availability for oxidation on the return scan. Changing the scan rate changes how much time that conversion has to occur.</p>
+<h2>3. Import and check the data</h2>
+<ol>
+<li>Open <strong>Fit data</strong>. Confirm the shared-conditions summary still shows area <strong>0.070 cm²</strong>, temperature <strong>298.15 K</strong>, and zero Ru/Cdl.</li>
+<li>Choose all three CSV files together. Each file contains one complete CV, with 241 observations.</li>
+<li>Set <strong>Charging-current treatment → None — corrected data or explicit circuit model</strong>. These synthetic currents have no charging background or file offset.</li>
+<li>For every data card, check CV, scan rate 0.1/0.5/1.0 V/s, and the import normalization: time in <strong>s</strong>, potential in <strong>V</strong>, current in <strong>A</strong>, <strong>As recorded</strong>, reference shift <strong>0 V</strong>. Leave species overrides empty so all three files use the model&#39;s shared initial concentrations.</li>
+<li>Resolve any blocking data errors, then choose <strong>Continue to parameter selection</strong>.</li>
+</ol>
+<p>The model&#39;s stored current convention is <strong>cathodic positive</strong>. These CSVs already use it. For an instrument exporting anodic-positive current, select <strong>Invert sign</strong> during import. Changing the plot&#39;s U.S./IUPAC display convention does not correct the imported data.</p>
+<p>For a real experiment, use a consistent reference electrode/potential offset and known area, concentration, temperature, Ru, and diffusion coefficients. An incorrect area or concentration can be absorbed into fitted kinetics. Compare blank measurements and choose the background treatment deliberately; do not let a flexible background compensate for missing chemistry.</p>
+<h2>4. Estimate three unknowns together</h2>
+<p>Select only these three <strong>Estimate</strong> checkboxes (the supplied JSON preselects them):</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th align="right">Starting value</th>
+<th align="right">Lower bound</th>
+<th align="right">Upper bound</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Ox / Red · E0 (<code>r1_E0</code>)</td>
+<td align="right">−0.01</td>
+<td align="right">−0.10</td>
+<td align="right">+0.10</td>
+<td>Formal potential, V</td>
+</tr>
+<tr>
+<td>Ox / Red · k0 (<code>r1_k0</code>)</td>
+<td align="right">0.020</td>
+<td align="right">0.001</td>
+<td align="right">0.10</td>
+<td>Electrode rate, cm/s</td>
+</tr>
+<tr>
+<td>Red to Product · k (<code>r2_k</code>)</td>
+<td align="right">0.50</td>
+<td align="right">0.05</td>
+<td align="right">10</td>
+<td>Chemical rate, s⁻¹</td>
+</tr>
+</tbody></table>
+<p>Hold α = 0.5, n = 1, concentrations, and all D values fixed. Leave shared-D fitting off. Fitting every quantity at once is usually not identifiable.</p>
+<p>Under <strong>Optimization</strong>, select <strong>Least squares</strong>, <strong>Implicit BDF2</strong>, <strong>3 multistart runs</strong>, <strong>1200 minimum timesteps</strong>, <strong>64 spatial grid points</strong>, and <strong>100 maximum iterations per start</strong>. Click <strong>Estimate selected parameters</strong>. The three experiments are fitted simultaneously to one common parameter vector.</p>
+<p>The packaged Rust/WebAssembly run on 2026-10-04 gave:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th align="right">Generating value</th>
+<th align="right">Recovered value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>E⁰, V</td>
+<td align="right">0.02000</td>
+<td align="right">0.020365</td>
+</tr>
+<tr>
+<td>k⁰, cm/s</td>
+<td align="right">0.01000</td>
+<td align="right">0.009793</td>
+</tr>
+<tr>
+<td>k, s⁻¹</td>
+<td align="right">1.500</td>
+<td align="right">1.4784</td>
+</tr>
+</tbody></table>
+<p>All three starts converged to one competitive solution; no fit warning triggered. Residual RMS was approximately 1.4–1.6% of peak current, consistent with the added noise. Combined time/grid refinement changed fitted currents by about <strong>0.023%</strong>. Small variation across versions is normal; exact reproduction is less important than convergence, residuals, and numerical checks.</p>
+<p><img src="ec_fit.png" alt="Three noisy CVs, fitted EC currents, and their residuals"></p>
+<p>Inspect the overlays and residuals. Broad lobes, drift, or scan-dependent mismatch indicate a model/conditions problem even if the optimizer converged. Check bounds and correlations. A value pressed against a bound is not a well-measured rate constant. Numerical certification checks currents at the fitted point; for demanding work, increase resolution and <strong>refit</strong> to check estimate stability too.</p>
+<p>Use <strong>Download calculation record (JSON)</strong> to retain the data, request, and results. This is an analysis record, not an importable saved GUI session. Keep the original files and mechanism JSON as well. Fitting does not overwrite the simulation editor&#39;s starting values; copy fitted values there explicitly if you want a new forward run.</p>
+<h2>5. Quantify uncertainty</h2>
+<h3>Start with a profile</h3>
+<p>Click <strong>Analyze uncertainty for this fit</strong>, now at the top of the fit result. Select <strong>Red to Product conversion · k (s⁻¹) [r2_k]</strong>, set <strong>11 profile points</strong> and <strong>3 standard errors</strong> for the span, then <strong>Calculate profile</strong>.</p>
+<p>At each fixed k, the other selected parameters are reoptimized. A finite interval asks which values remain compatible with these data under the specified model. The verified run gave approximately <strong>1.452–1.505 s⁻¹</strong> for the 95% profile interval. The check used two starts per profile point; the GUI inherits the fit&#39;s three, so its final digits can differ.</p>
+<p>If the profile only gives a lower/upper limit, or never crosses the threshold, do not report a finite two-sided interval. Expand the profile span; examine bounds and refit warnings. More informative experiments may be needed. This interval remains conditional on the EC mechanism and fixed D, area, concentration, α, and temperature.</p>
+<h3>Include uncertainty in a measured condition</h3>
+<p>In <strong>Measured-input uncertainty</strong>, select <strong>Electrode area</strong>. Enter <strong>0.070 cm²</strong> and <strong>standard uncertainty 0.0014 cm²</strong> (2%, one standard deviation), add it to the list, then <strong>Propagate measured uncertainty</strong>. Use the default 95% level.</p>
+<p>This refits at perturbed input values and combines the local contributions. In the verified run, the SE of k increased from <strong>0.01354 to 0.02571 s⁻¹</strong>, and its combined interval was about <strong>1.429–1.530 s⁻¹</strong>. This is distinct from the conditional profile interval. Review the reported nonlinearity; the calculation is a local propagation approximation, assumes independent measured inputs, and is not a full joint Bayesian treatment of all input errors.</p>
+<p>Download each result before running the next analysis: the results pane is replaced. Editing the study clears its fit and uncertainty target; refit before continuing.</p>
+<h3>Bayesian analysis is optional and needs diagnostics</h3>
+<p>Expand <strong>Advanced: Bayesian posterior</strong>. Independent Gaussian noise is appropriate for these generated errors; retain bounded uniform priors for this exercise. Try <strong>4 chains</strong>, <strong>1000 warm-up steps</strong>, <strong>1000 retained samples per chain</strong>, proposal scale <strong>1</strong>, and seed <strong>2026</strong>.</p>
+<p>Completion alone is not convergence. Inspect R̂, bulk/tail effective sample size, MCSE, noise-parameter diagnostics, and predictive intervals. The interface flags disagreement. Short/default runs can mix poorly; a longer run is only useful if diagnostics improve. Do not quote credible intervals from a poorly mixed run. AR(1) is an optional residual-correlation model, not a correction for a wrong reaction mechanism.</p>
+<p><strong>Verified limitation:</strong> after correcting a noise-proposal scaling problem, this 1,000-sample run gave kinetic R̂ values of approximately <strong>1.015, 1.020, and 1.009</strong>, with bulk ESS <strong>226, 195, and 275</strong>. That is a substantial improvement over the former ESS of 4–5, but some kinetic and noise parameters still fail the website&#39;s strict R̂ ≤ 1.01 criterion. Treat these settings as a diagnostic exercise, not a certified Bayesian answer. The profile and measured-input results above are the recommended starting path; longer Bayesian runs must be checked again before reporting them.</p>
+<h2>6. Compare mechanisms</h2>
+<p>Keep all three files loaded and go to <strong>Discover mechanism → Standard mechanism library</strong>.</p>
+<ol>
+<li>Set concentration <strong>0.001 M</strong>, D estimate <strong>0.00001 cm²/s</strong>, E⁰ bounds <strong>−0.10 to +0.10 V</strong>, and criterion <strong>AICc</strong>. The EC′ substrate field is unused for the candidates below.</li>
+<li>Select <strong>E (reversible)</strong>, <strong>E (quasi-reversible)</strong>, <strong>EC</strong>, and <strong>CE</strong> only.</li>
+<li>Keep the fit&#39;s BDF2, 64-point, 1200-step, three-start settings. Library candidates use their own parameterizations; they do not simply compare the three checked parameters from the custom EC fit.</li>
+<li>Click <strong>Compare standard mechanisms</strong>. Inspect candidate overlays/residuals, score differences, warnings, and observational-equivalence groups. EC should rank first for this dataset.</li>
+<li>Optionally enable <strong>leave-one-experiment-out predictive validation</strong> and repeat. This costs extra fits; it asks whether a model trained on two experiments predicts the third.</li>
+<li>Choose <strong>Use model &amp; refit</strong> for a candidate you want to investigate. This replaces the editable setup and immediately refits with the candidate&#39;s preserved constraints. Review its parameter choices and bounds; refit again if you change them, then use the same uncertainty workflow. Download the comparison record before this step, because changing the study clears the ranking.</li>
+</ol>
+<p>A ranking establishes relative support <strong>among the supplied candidates</strong>, not a unique molecular mechanism. Small score differences or indistinguishable predictions should be reported as ambiguity. Candidate weights are conditional on that candidate set. For a real study, reserve independent conditions/replicates for prediction and look for missing transport, charging, or adsorption physics before adding reactions.</p>
+<p>In the verified comparison, EC ranked first. The next candidate, quasi-reversible E, had ΔAICc ≈ 3423; this deliberately clear teaching case strongly distinguishes EC within the tested library. Real experiments often yield much smaller separations. The comparison can take several minutes, especially with predictive validation enabled.</p>
+<p>The comparison also warns that quasi-reversible E and CE are indistinguishable from each other at the residual scale. Here that ambiguity concerns two poorly fitting alternatives, not the winning EC model. Read the named groups instead of interpreting a general ambiguity warning as applying to every candidate.</p>
+<h2>7. Other website capabilities</h2>
+<ul>
+<li><strong>Chronoamperometry:</strong> on Simulate, retain the mechanism, select potential-step chronoamperometry, hold at +0.30 V and step to −0.20 V. For example, use 0.1 s quiet time, 3 s step duration, and 0.01 s requested sampling. This predicts the reduction transient followed by conversion of Red. Fit actual time/potential/current traces through Fit data. CV and chronoamperometry must currently be fitted as separate studies. The supplied CSVs are CV data, not chronoamperometry data.</li>
+<li><strong>Structured species search:</strong> enter actual elemental compositions and charges, then mark reactions Required, Candidate, or Excluded. Review search coverage and stability. This needs chemical knowledge beyond three abstract species labels; it is not an automatic proof of mechanism.</li>
+<li><strong>Sparse rate law:</strong> use a known electrochemical scaffold, select a homogeneous target step and its possible concentration inputs, and compare a small polynomial library. For this EC example the expected term is proportional to Red. Keep this as an advanced, supervised exercise; coefficients and support depend on the tested experiments and competing terms.</li>
+<li><strong>Limits:</strong> PNP is forward-only, standard-library/structured searches do not support nonzero circuit elements, and mixed CV/chrono studies are not supported. Search modes have distinct restrictions; follow their availability messages. Enzyme immobilization, strip geometry, and finite-volume boundaries require their own justified model and are not established by this EC tutorial.</li>
+</ul>
+<h2>Reproduce the verification in Rust</h2>
+<p>From the repository root, with the pinned Rust toolchain and Node available:</p>
+<pre><code class="language-sh">cargo run --release --manifest-path browser/Cargo.toml -p electrochem-core --example ec_tutorial
+node browser/test_ec_tutorial.mjs
+# Optional, longer diagnostic exercise:
+node browser/test_ec_tutorial.mjs --posterior-only
+</code></pre>
+<p>The native Rust generator checks concentration conservation, nonnegativity, the zero-chemical-rate limit, and numerical refinement. It uses a finer grid/time discretization than the inverse calculation, adds deterministic independent Gaussian noise (1.5% of each clean peak; seed 20261004), and writes the three CSVs plus <code>generation.txt</code>. Generation refinement is below 0.016%. The browser check uses the real importer and packaged Rust/WASM fitter, profile, measured-input propagation, and library comparison. Requests and complete outputs go into ignored <code>examples/output/ec_tutorial/</code>.</p>
+<p>This verifies the integrated workflow for a deliberately tractable EC case. Repeated noise realizations, interval-coverage studies, and controlled real-data benchmarks are still needed for broader scientific claims.</p>
+</main></body></html>

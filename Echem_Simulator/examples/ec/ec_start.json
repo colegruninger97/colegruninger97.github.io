@@ -1,0 +1,82 @@
+{
+  "name": "EC tutorial: electron transfer then chemical conversion",
+  "species": [
+    {
+      "name": "Ox",
+      "phase": "solution",
+      "initial": 0.001,
+      "D": 0.00001,
+      "fit_D": false
+    },
+    {
+      "name": "Red",
+      "phase": "solution",
+      "initial": 0,
+      "D": 0.00001,
+      "fit_D": false
+    },
+    {
+      "name": "Product",
+      "phase": "solution",
+      "initial": 0,
+      "D": 0.00001,
+      "fit_D": false
+    }
+  ],
+  "reactions": [
+    {
+      "label": "Ox / Red electron transfer",
+      "type": "solution_electron",
+      "reactants": [{ "species": "Ox", "stoich": 1 }],
+      "products": [{ "species": "Red", "stoich": 1 }],
+      "parameters": {
+        "E0": {
+          "value": -0.01,
+          "fit": true,
+          "transform": "identity",
+          "lower": -0.1,
+          "upper": 0.1,
+          "unit": "V"
+        },
+        "k0": {
+          "value": 0.02,
+          "fit": true,
+          "transform": "log",
+          "lower": 0.001,
+          "upper": 0.1,
+          "unit": "cm s⁻¹"
+        },
+        "alpha": {
+          "value": 0.5,
+          "fit": false,
+          "transform": "logit",
+          "lower": 0.01,
+          "upper": 0.99
+        },
+        "n": {
+          "value": 1,
+          "fit": false,
+          "transform": "identity",
+          "lower": 0.5,
+          "upper": 1.5
+        }
+      }
+    },
+    {
+      "label": "Red to Product conversion",
+      "type": "bulk_mass_action",
+      "reactants": [{ "species": "Red", "stoich": 1 }],
+      "products": [{ "species": "Product", "stoich": 1 }],
+      "parameters": {
+        "k": {
+          "value": 0.5,
+          "fit": true,
+          "transform": "log",
+          "lower": 0.05,
+          "upper": 10,
+          "unit": "s⁻¹"
+        }
+      }
+    }
+  ]
+}
