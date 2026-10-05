@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Browser-based electrochemical simulation, fitting, mechanism discovery, and uncertainty analysis in Rust and WebAssembly.">
   <title>EchemLab — Electrochemical Simulation and Inference</title>
-  <link rel="stylesheet" href="styles.css?v=20261004-ec-guide1">
+  <link rel="stylesheet" href="styles.css?v=20261004-concentrations1">
 </head>
 <body>
   <header class="app-header">
@@ -200,6 +200,31 @@
           </details>
         </section>
       </div>
+      <section id="concentration-panel" class="full-panel spaced" aria-labelledby="concentration-heading">
+        <div class="result-header">
+          <div><p class="eyebrow">Inside the experiment</p><h3 id="concentration-heading">Concentrations over time</h3></div>
+          <span id="concentration-run" class="helper-text"></span>
+        </div>
+        <p id="concentration-empty" class="empty-state">Run a simulation to explore how the species change during the experiment.</p>
+        <div id="concentration-content" hidden>
+          <div class="concentration-toolbar">
+            <label class="field"><span>Show</span><select id="concentration-mode" aria-label="Concentration view"></select></label>
+            <p class="helper-text">Use the time slider or press Play. The circle on the current trace marks the same moment.</p>
+            <button id="concentration-export" class="button secondary small" type="button">Export concentrations</button>
+          </div>
+          <div class="concentration-playback">
+            <button id="concentration-play" class="button secondary small" type="button" aria-pressed="false">Play</button>
+            <label for="concentration-time">Time</label>
+            <input id="concentration-time" type="range" min="0" max="0" value="0" step="1" aria-label="Experiment time">
+            <output id="concentration-position" for="concentration-time"></output>
+          </div>
+          <div class="concentration-time-extent"><span id="concentration-start"></span><span>Full experiment plays in 10 seconds</span><span id="concentration-end"></span></div>
+          <div class="concentration-chart-wrap"><canvas id="concentration-chart" role="img" aria-label="Simulated concentrations"></canvas></div>
+          <p id="concentration-values-label" class="helper-text"></p>
+          <div id="concentration-species" class="concentration-species"></div>
+          <p id="concentration-note" class="helper-text"></p>
+        </div>
+      </section>
       </div>
 
       <div id="view-data" class="workbench-view">
@@ -398,11 +423,12 @@
     </main>
   </div>
   <!-- Bump this shared version when publishing changed GUI or Wasm assets. -->
-  <script src="wasm-engine.js?v=20261004-ec-guide1" defer></script>
-  <script src="import_data.js?v=20261004-ec-guide1" defer></script>
-  <script src="app.js?v=20261004-ec-guide1" defer></script>
-  <script src="mechanism_builder.js?v=20261004-ec-guide1" defer></script>
-  <script src="fit-workflow.js?v=20261004-ec-guide1" defer></script>
-  <script src="discovery-workflow.js?v=20261004-ec-guide1" defer></script>
+  <script src="wasm-engine.js?v=20261004-concentrations1" defer></script>
+  <script src="import_data.js?v=20261004-concentrations1" defer></script>
+  <script src="concentration-view.js?v=20261004-concentrations1" defer></script>
+  <script src="app.js?v=20261004-concentrations1" defer></script>
+  <script src="mechanism_builder.js?v=20261004-concentrations1" defer></script>
+  <script src="fit-workflow.js?v=20261004-concentrations1" defer></script>
+  <script src="discovery-workflow.js?v=20261004-concentrations1" defer></script>
 </body>
 </html>

@@ -89,6 +89,11 @@ function renderSimulationContext() {
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
+let concentrationSampleIndex = null;
+const concentrationView = window.ElectrochemConcentrations.create({onSample(index) {
+  concentrationSampleIndex = index;
+  if (latestResult) drawChart(latestResult);
+}});
 
 function escapeHTML(value) {
   return String(value).replace(/[&<>'"]/g, character => ({
@@ -97,6 +102,7 @@ function escapeHTML(value) {
 }
 
 function switchView(name) {
+  if (name !== "simulate") concentrationView.pause();
   if(typeof renderFitConditions==="function")renderFitConditions();
   $$(".workbench-view").forEach(view => {
     view.classList.toggle("active", view.id === `view-${name}`);
@@ -106,6 +112,7 @@ function switchView(name) {
     button.classList.toggle("active", button.dataset.viewTarget === group);
   });
   window.scrollTo({top: 0, behavior: "smooth"});
+  if (name === "simulate") { concentrationView.draw(); if (latestResult) drawChart(latestResult); }
 }
 
 function selectPreset(name) {
@@ -302,6 +309,16 @@ function drawChart(result) {
     ctx.stroke();
   });
   ctx.setLineDash([]);ctx.globalAlpha=1;
+  if (Number.isInteger(concentrationSampleIndex)) {
+    const index = concentrationSampleIndex;
+    const coordinate = chrono ? result.time[index] : result.potential[index];
+    const value = result.series[0]?.current[index];
+    if (Number.isFinite(coordinate) && Number.isFinite(value)) {
+      const x = xpx(coordinate), y = ypx(displayedCurrent(value));
+      ctx.fillStyle = "#ffffff"; ctx.strokeStyle = "#254b67"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+  }
   ctx.fillStyle = "#304b53"; ctx.font = "12px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
   ctx.fillText(chrono?"Time (s)":"Potential vs reference (V)", pad.left+plotW/2, height-8);
   ctx.save(); ctx.translate(16,pad.top+plotH/2); ctx.rotate(-Math.PI/2); ctx.fillText(`Current (${unit.label})`,0,0); ctx.restore();
@@ -314,6 +331,7 @@ function displayResult(result, simulationInput = null) {
   result._setupRevision=simulationRevision;
   result.experiment_type=simulationInput?.experiment_type||"cyclic_voltammetry";
   latestResult = result;
+  concentrationView.setResult(result);
   syncDisplayedExperimentLabels();
   renderSimulationContext();
   drawChart(result);

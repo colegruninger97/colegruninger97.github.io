@@ -49,6 +49,10 @@ Click **Simulate**. Review the numerical-resolution report. Save traces explicit
 
 The scan starts positive of E⁰ and moves negative, reducing Ox. The chemical step consumes Red, reducing its availability for oxidation on the return scan. Changing the scan rate changes how much time that conversion has to occur.
 
+Below the current plot, open **Concentrations over time**. With **Show → Across the solution**, press **Play** or move the **Time** slider: Ox is depleted near distance zero, Red forms at the electrode, and Product accumulates through the chemical step. The circle on the current trace marks the same time, so you can distinguish the outgoing and return sweeps. Use the species checkboxes to isolate a curve; the vertical scale stays fixed during playback. **Solution at electrode** shows the full concentration histories at distance zero. **Export concentrations** saves the selected view in CSV format, using M, cm, and seconds. Surface mechanisms additionally offer **Surface coverage**, in amount per area.
+
+These plots show the same calculated states as the current response. Spatial playback uses a bounded set of recorded times, including the first and last reported samples. It does not add a finite strip boundary or change the diffusion assumptions; it helps inspect what the chosen model predicts. The same controls work after a chronoamperometry simulation.
+
 ## 3. Import and check the data
 
 1. Open **Fit data**. Confirm the shared-conditions summary still shows area **0.070 cm²**, temperature **298.15 K**, and zero Ru/Cdl.
