@@ -397,3 +397,27 @@ main { width: min(1380px, 100%); margin: 0 auto; padding: 27px clamp(22px,3vw,48
   .metric-grid { grid-template-columns: repeat(2,1fr); }
   .chart-wrap { height: 320px; }
 }
+[id="concentration-panel"] { margin-top: 24px; }
+.concentration-toolbar { display: flex; align-items: center; gap: 20px; margin: 18px 0; }
+.concentration-toolbar .field { min-width: 220px; }
+.concentration-toolbar p { flex: 1; }
+.concentration-playback { display: flex; align-items: center; gap: 14px; font-size: 12px; }
+.concentration-playback button { min-width: 72px; }
+.concentration-playback input { flex: 1; min-width: 80px; accent-color: var(--carolina-dark); cursor: pointer; }
+.concentration-playback output { min-width: 180px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+.concentration-time-extent { display: flex; justify-content: space-between; margin: 10px 0 16px; color: #617585; font-size: 11px; }
+.concentration-chart-wrap { height: 340px; border: 1px solid #dbe4ec; border-radius: 10px; overflow: hidden; }
+.concentration-chart-wrap canvas { display: block; width: 100%; height: 100%; }
+.concentration-species { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 16px; }
+.concentration-species label { display: flex; align-items: center; gap: 8px; border: 1px solid #dbe4ec; border-radius: 8px; padding: 9px 12px; font-size: 12px; cursor: pointer; }
+.concentration-species input { accent-color: var(--carolina-dark); }
+.concentration-species i { width: 16px; height: 3px; flex-shrink: 0; }
+.concentration-species strong { color: #42596b; font-variant-numeric: tabular-nums; font-size: 11px; }
+@media (max-width: 700px) {
+  .concentration-toolbar { flex-wrap: wrap; gap: 10px; }
+  .concentration-toolbar .field { min-width: 0; width: 100%; }
+  .concentration-toolbar p { flex-basis: 100%; }
+  .concentration-playback { flex-wrap: wrap; gap: 10px; }
+  .concentration-playback output { flex-basis: 100%; text-align: left; }
+  .concentration-chart-wrap { height: 280px; }
+}
